@@ -203,9 +203,10 @@ def main_menu(user_id: int):
         ["📌 اطلاعات", "🛠 ابزارها"],
         ["📝 ثبت‌نام", "🛒 ثبت سفارش"],
         ["💳 پرداخت تستی", "📨 پشتیبانی"],
-        ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"]
+        ["🔘 دکمه‌های Inline"]
     ]
     if user_id in ADMINS:
+        buttons.append(["⚙️ تنظیمات"])
         buttons.append(["👑 پنل مدیریت"])
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
@@ -435,12 +436,8 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("زیرمنوی ابزارها:", reply_markup=tools_menu())
         return
 
-    if text == "⚙️ تنظیمات":
-        await update.message.reply_text("زیرمنوی تنظیمات:", reply_markup=settings_menu())
-        return
-
     if text == "📨 پشتیبانی":
-        await update.message.reply_text("برای پشتیبانی پیام بده: @YourSupport")
+        await update.message.reply_text("برای پشتیبانی پیام بده: @kabiri67m")
         return
 
     if text == "❓ راهنما":
@@ -462,6 +459,14 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "📊 وضعیت سرور":
         await update.message.reply_text("سرور فعال است و بدون مشکل کار می‌کند ⚡")
+        return
+
+    # تنظیمات فقط برای ادمین‌ها
+    if text == "⚙️ تنظیمات":
+        if user_id not in ADMINS:
+            await update.message.reply_text("❌ فقط ادمین‌ها می‌توانند تنظیمات را ببینند.")
+            return
+        await update.message.reply_text("زیرمنوی تنظیمات:", reply_markup=settings_menu())
         return
 
     # زیرمنوی ابزارها (نمونه)
@@ -545,207 +550,4 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admins = db_get_admins()
         msg = "📋 لیست ادمین‌ها:\n"
         for a in admins:
-            mark = " (محمد)" if a == MAIN_ADMIN_ID else ""
-            msg += f"- ID: {a}{mark}\n"
-        await query.edit_message_text(msg)
-        return
-
-    if data == "list_users":
-        users = db_get_users()
-        if not users:
-            await query.edit_message_text("هیچ کاربری ثبت‌نام نکرده هنوز.")
-        else:
-            msg = "📋 لیست کاربران ثبت‌نام‌شده:\n"
-            for uid, name, ts in users:
-                msg += f"- {name} (ID: {uid}) | {ts}\n"
-            await query.edit_message_text(msg)
-        return
-
-    if data == "list_orders":
-        orders = db_get_orders()
-        if not orders:
-            await query.edit_message_text("هیچ سفارشی ثبت نشده.")
-        else:
-            msg = "📋 لیست سفارش‌ها:\n"
-            for oid, uid, cat, prod, qty, status, ts in orders:
-                msg += f"- #{oid} | کاربر {uid} | {cat}/{prod} x{qty} | {status} | {ts}\n"
-            await query.edit_message_text(msg)
-        return
-
-    if data == "list_payments":
-        payments = db_get_payments()
-        if not payments:
-            await query.edit_message_text("هیچ پرداختی ثبت نشده.")
-        else:
-            msg = "📋 لیست پرداخت‌ها:\n"
-            for pid, uid, oid, method, status, ts in payments:
-                msg += f"- #{pid} | کاربر {uid} | سفارش #{oid} | {method} | {status} | {ts}\n"
-            await query.edit_message_text(msg)
-        return
-
-    if data == "self_add_admin":
-        db_add_admin(user_id)
-        await query.edit_message_text("✔ شما به لیست ادمین‌ها اضافه شدید.")
-        return
-
-    if data == "self_remove_admin":
-        if user_id == MAIN_ADMIN_ID:
-            await query.edit_message_text("❌ ادمین اصلی قابل حذف نیست.")
-        else:
-            db_remove_admin(user_id)
-            await query.edit_message_text("❌ شما از لیست ادمین‌ها حذف شدید.")
-        return
-
-    if data == "close_admin":
-        await query.edit_message_text("پنل مدیریت بسته شد ❌")
-        return
-
-    # فرم سفارش حرفه‌ای
-    order = context.user_data.get("order", {})
-
-    if data == "order_cat_A":
-        order["category"] = "A"
-        context.user_data["order"] = order
-        await query.edit_message_text(
-            "دسته A انتخاب شد.\nلطفاً محصول را انتخاب کن:",
-            reply_markup=order_product_keyboard("A")
-        )
-        return
-
-    if data == "order_cat_B":
-        order["category"] = "B"
-        context.user_data["order"] = order
-        await query.edit_message_text(
-            "دسته B انتخاب شد.\nلطفاً محصول را انتخاب کن:",
-            reply_markup=order_product_keyboard("B")
-        )
-        return
-
-    if data == "order_back_cat":
-        await query.edit_message_text(
-            "لطفاً دستهٔ محصول را انتخاب کن:",
-            reply_markup=order_category_keyboard()
-        )
-        return
-
-    if data.startswith("order_prod_"):
-        prod_map = {
-            "order_prod_A1": "محصول A1",
-            "order_prod_A2": "محصول A2",
-            "order_prod_B1": "محصول B1",
-            "order_prod_B2": "محصول B2",
-        }
-        product = prod_map.get(data, "نامشخص")
-        order["product"] = product
-        context.user_data["order"] = order
-        await query.edit_message_text(
-            f"محصول انتخاب شد: {product}\nلطفاً تعداد را انتخاب کن:",
-            reply_markup=order_quantity_keyboard()
-        )
-        return
-
-    if data.startswith("order_qty_"):
-        qty_map = {
-            "order_qty_1": 1,
-            "order_qty_2": 2,
-            "order_qty_3": 3,
-        }
-        quantity = qty_map.get(data, 1)
-        order["quantity"] = quantity
-        context.user_data["order"] = order
-        summary = f"خلاصه سفارش:\nدسته: {order.get('category')}\nمحصول: {order.get('product')}\nتعداد: {order.get('quantity')}"
-        await query.edit_message_text(
-            summary + "\nآیا تأیید می‌کنی؟",
-            reply_markup=order_confirm_keyboard()
-        )
-        return
-
-    if data == "order_confirm":
-        if not order.get("category") or not order.get("product") or not order.get("quantity"):
-            await query.edit_message_text("اطلاعات سفارش ناقص است.")
-            return
-        order_id = db_create_order(user_id, order["category"], order["product"], order["quantity"])
-        context.user_data["last_order_id"] = order_id
-        context.user_data["order"] = {}
-        await query.edit_message_text(
-            f"سفارش ثبت شد ✅\nشماره سفارش: #{order_id}\nبرای پرداخت تستی از منو «💳 پرداخت تستی» استفاده کن."
-        )
-        return
-
-    if data == "order_cancel":
-        context.user_data["order"] = {}
-        await query.edit_message_text("سفارش لغو شد ❌")
-        return
-
-    # سیستم پرداخت تستی حرفه‌ای
-    payment = context.user_data.get("payment", {})
-
-    if data == "pay_method_card":
-        payment["method"] = "کارت"
-        context.user_data["payment"] = payment
-        await query.edit_message_text(
-            "روش پرداخت: کارت 💳\nآیا تأیید می‌کنی؟",
-            reply_markup=payment_confirm_keyboard()
-        )
-        return
-
-    if data == "pay_method_cash":
-        payment["method"] = "نقدی"
-        context.user_data["payment"] = payment
-        await query.edit_message_text(
-            "روش پرداخت: نقدی 💵\nآیا تأیید می‌کنی؟",
-            reply_markup=payment_confirm_keyboard()
-        )
-        return
-
-    if data == "pay_confirm":
-        order_id = payment.get("order_id")
-        method = payment.get("method")
-        if not order_id or not method:
-            await query.edit_message_text("اطلاعات پرداخت ناقص است.")
-            return
-        payment_id = db_create_payment(user_id, order_id, method)
-        context.user_data["payment"] = {}
-        await query.edit_message_text(
-            f"پرداخت تستی ثبت شد ✅\nشماره پرداخت: #{payment_id}\nسفارش #{order_id} با روش {method} پرداخت شد (تستی)."
-        )
-        return
-
-    if data == "pay_cancel":
-        context.user_data["payment"] = {}
-        await query.edit_message_text("پرداخت لغو شد ❌")
-        return
-
-# ============================
-#  اجرای ربات
-# ============================
-async def run_bot():
-    application = ApplicationBuilder().token(TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    application.add_handler(CallbackQueryHandler(inline_handler))
-
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
-    while True:
-        await asyncio.sleep(1)
-
-# ============================
-#  نقطه شروع
-# ============================
-if __name__ == "__main__":
-    from threading import Thread
-
-    init_db()
-
-    Thread(
-        target=lambda: app_web.run(
-            host="0.0.0.0",
-            port=int(os.environ.get("PORT", 5000))
-        )
-    ).start()
-
-    asyncio.run(run_bot())
+            mark = " (محمد)" if a == MAIN_ADMIN_ID else
