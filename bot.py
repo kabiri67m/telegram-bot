@@ -33,8 +33,11 @@ async def run_bot():
     await application.updater.idle()
 
 if __name__ == "__main__":
-    # اجرای ربات در حلقهٔ asyncio اصلی (بدون Thread)
-    loop = asyncio.get_event_loop()
+    # ساخت حلقهٔ جدید برای asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # اجرای ربات در همان حلقه
     loop.create_task(run_bot())
 
     # اجرای Flask برای Render
