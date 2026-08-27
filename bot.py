@@ -1,5 +1,6 @@
 import os
 import asyncio
+import sqlite3
 from dotenv import load_dotenv
 from telegram import (
     Update,
@@ -21,11 +22,9 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# ============================
-#  ادمین دائمی (محمد)
-# ============================
+# ادمین دائمی (محمد)
 MAIN_ADMIN_ID = 1190530645
-ADMINS = {MAIN_ADMIN_ID}
+ADMINS = set()
 
 # وب‌سرور برای Render
 app_web = Flask(__name__)
@@ -35,7 +34,84 @@ def home():
     return "Bot is running on Render!"
 
 # ============================
-#  منوی اصلی
+#  توابع دیتابیس
+# ============================
+
+DB_PATH = "bot.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # جدول ادمین‌ها
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY
+        )
+    """)
+
+    # جدول کاربران ثبت‌نام‌شده
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            name TEXT
+        )
+    """)
+
+    # اطمینان از وجود ادمین اصلی
+    c.execute("INSERT OR IGNORE INTO admins (id) VALUES (?)", (MAIN_ADMIN_ID,))
+
+    conn.commit()
+
+    # بارگذاری ادمین‌ها در حافظه
+    c.execute("SELECT id FROM admins")
+    rows = c.fetchall()
+    for row in rows:
+        ADMINS.add(row[0])
+
+    conn.close()
+
+def db_add_admin(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO admins (id) VALUES (?)", (user_id,))
+    conn.commit()
+    conn.close()
+    ADMINS.add(user_id)
+
+def db_remove_admin(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM admins WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    ADMINS.discard(user_id)
+
+def db_get_admins():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id FROM admins")
+    rows = c.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+def db_add_user(user_id: int, name: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)", (user_id, name))
+    conn.commit()
+    conn.close()
+
+def db_get_users():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM users")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+# ============================
+#  منوها
 # ============================
 
 def main_menu():
@@ -44,14 +120,10 @@ def main_menu():
             ["📌 اطلاعات", "🛠 ابزارها"],
             ["📨 پشتیبانی", "❓ راهنما"],
             ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"],
-            ["👑 پنل مدیریت"]
+            ["📝 ثبت‌نام", "👑 پنل مدیریت"]
         ],
         resize_keyboard=True
     )
-
-# ============================
-#  زیرمنوها
-# ============================
 
 def info_menu():
     return ReplyKeyboardMarkup(
@@ -100,20 +172,13 @@ def user_manage_menu():
 def admin_panel():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ افزودن ادمین", callback_data="add_admin"),
-            InlineKeyboardButton("➖ حذف ادمین", callback_data="remove_admin")
-        ],
-        [
-            InlineKeyboardButton("📋 لیست ادمین‌ها", callback_data="list_admins")
+            InlineKeyboardButton("📋 لیست ادمین‌ها", callback_data="list_admins"),
+            InlineKeyboardButton("📋 لیست کاربران", callback_data="list_users")
         ],
         [
             InlineKeyboardButton("❌ بستن", callback_data="close_admin")
         ]
     ])
-
-# ============================
-#  دکمه‌های Inline نمونه
-# ============================
 
 def inline_menu():
     return InlineKeyboardMarkup([
@@ -144,9 +209,21 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.message.from_user.id
 
-    # ---------------------------
-    #  پنل مدیریت
-    # ---------------------------
+    # فرم ثبت‌نام - مرحله دوم
+    if context.user_data.get("state") == "register_name":
+        name = text.strip()
+        if not name:
+            await update.message.reply_text("لطفاً یک نام معتبر وارد کن.")
+            return
+        db_add_user(user_id, name)
+        context.user_data["state"] = None
+        await update.message.reply_text(
+            f"ثبت‌نام انجام شد ✅\nنام: {name}",
+            reply_markup=main_menu()
+        )
+        return
+
+    # پنل مدیریت
     if text == "👑 پنل مدیریت":
         if user_id not in ADMINS:
             await update.message.reply_text("❌ شما ادمین نیستید!")
@@ -158,9 +235,13 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ---------------------------
-    #  منوی اصلی
-    # ---------------------------
+    # ثبت‌نام
+    if text == "📝 ثبت‌نام":
+        context.user_data["state"] = "register_name"
+        await update.message.reply_text("لطفاً نام خودت را بفرست:")
+        return
+
+    # منوی اصلی
     if text == "📌 اطلاعات":
         await update.message.reply_text("زیرمنوی اطلاعات:", reply_markup=info_menu())
 
@@ -182,11 +263,9 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=inline_menu()
         )
 
-    # ---------------------------
-    #  زیرمنوی اطلاعات
-    # ---------------------------
+    # زیرمنوی اطلاعات
     elif text == "ℹ️ نسخه ربات":
-        await update.message.reply_text("نسخه فعلی ربات: 3.0.0")
+        await update.message.reply_text("نسخه فعلی ربات: 4.0.0")
 
     elif text == "👤 درباره ما":
         await update.message.reply_text("این ربات توسط محمد ساخته شده است 🌟")
@@ -194,9 +273,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📊 وضعیت سرور":
         await update.message.reply_text("سرور فعال است ⚡")
 
-    # ---------------------------
-    #  زیرمنوی ابزارها
-    # ---------------------------
+    # زیرمنوی ابزارها
     elif text == "🧮 ماشین حساب":
         await update.message.reply_text("ماشین حساب فعلاً فعال نیست 🔧")
 
@@ -209,9 +286,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📷 پردازش تصویر":
         await update.message.reply_text("پردازش تصویر در نسخهٔ بعدی فعال می‌شود 📷")
 
-    # ---------------------------
-    #  زیرمنوی تنظیمات
-    # ---------------------------
+    # زیرمنوی تنظیمات
     elif text == "🔔 اعلان‌ها":
         await update.message.reply_text("بخش اعلان‌ها فعال شد 🔔")
 
@@ -221,9 +296,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "👥 مدیریت کاربران":
         await update.message.reply_text("زیرمنوی مدیریت کاربران:", reply_markup=user_manage_menu())
 
-    # ---------------------------
-    #  زیرمنوی مدیریت کاربران
-    # ---------------------------
+    # زیرمنوی مدیریت کاربران (نمونه)
     elif text == "➕ افزودن کاربر":
         await update.message.reply_text("افزودن کاربر: به‌زودی فعال می‌شود")
 
@@ -231,11 +304,16 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("حذف کاربر: به‌زودی فعال می‌شود")
 
     elif text == "📋 لیست کاربران":
-        await update.message.reply_text("لیست کاربران: به‌زودی فعال می‌شود")
+        users = db_get_users()
+        if not users:
+            await update.message.reply_text("هیچ کاربری ثبت‌نام نکرده هنوز.")
+        else:
+            msg = "📋 لیست کاربران ثبت‌نام‌شده:\n"
+            for uid, name in users:
+                msg += f"- {name} (ID: {uid})\n"
+            await update.message.reply_text(msg)
 
-    # ---------------------------
-    #  دکمه‌های بازگشت
-    # ---------------------------
+    # بازگشت
     elif text == "⬅️ بازگشت":
         await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu())
 
@@ -254,35 +332,34 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     await query.answer()
 
-    # ---------------------------
-    #  دکمه‌های نمونه
-    # ---------------------------
     if query.data == "send_msg":
         await query.edit_message_text("پیام ارسال شد 📤")
 
     elif query.data == "close":
         await query.edit_message_text("پنجره بسته شد ❌")
 
-    # ---------------------------
-    #  پنل مدیریت
-    # ---------------------------
-    elif query.data == "add_admin":
-        ADMINS.add(user_id)
-        await query.edit_message_text("✔ شما به لیست ادمین‌ها اضافه شدید")
-
-    elif query.data == "remove_admin":
-        ADMINS.discard(user_id)
-        await query.edit_message_text("❌ شما از لیست ادمین‌ها حذف شدید")
-
     elif query.data == "list_admins":
-        admin_list = "\n".join(str(a) for a in ADMINS)
-        await query.edit_message_text(f"📋 لیست ادمین‌ها:\n{admin_list}")
+        admins = db_get_admins()
+        msg = "📋 لیست ادمین‌ها:\n"
+        for a in admins:
+            msg += f"- ID: {a}\n"
+        await query.edit_message_text(msg)
+
+    elif query.data == "list_users":
+        users = db_get_users()
+        if not users:
+            await query.edit_message_text("هیچ کاربری ثبت‌نام نکرده هنوز.")
+        else:
+            msg = "📋 لیست کاربران ثبت‌نام‌شده:\n"
+            for uid, name in users:
+                msg += f"- {name} (ID: {uid})\n"
+            await query.edit_message_text(msg)
 
     elif query.data == "close_admin":
         await query.edit_message_text("پنل مدیریت بسته شد ❌")
 
 # ============================
-#  اجرای ربات تلگرام
+#  اجرای ربات
 # ============================
 
 async def run_bot():
@@ -300,11 +377,13 @@ async def run_bot():
         await asyncio.sleep(1)
 
 # ============================
-#  نقطهٔ شروع برنامه
+#  نقطه شروع
 # ============================
 
 if __name__ == "__main__":
     from threading import Thread
+
+    init_db()
 
     Thread(
         target=lambda: app_web.run(
