@@ -2,7 +2,13 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 from flask import Flask
 
 # بارگذاری متغیرهای محیطی
@@ -23,23 +29,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("پیامت رسید 👌")
 
-async def main():
+async def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
-    print("Starting bot polling...")
-
-    # به‌جای run_polling (که خودش حلقه رو مدیریت می‌کنه)، همه‌چیز رو دستی کنترل می‌کنیم:
+    # اجرای کامل بدون run_polling
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    await application.updater.idle()
+
+    # اینجا حلقه را باز نگه می‌داریم بدون idle()
+    while True:
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    # اجرای Flask در Thread جدا تا Render پورت رو چک کنه
+    # اجرای Flask در Thread جدا
     from threading import Thread
-    Thread(target=lambda: app_web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
+    Thread(
+        target=lambda: app_web.run(
+            host="0.0.0.0",
+            port=int(os.environ.get("PORT", 5000))
+        )
+    ).start()
 
-    # اجرای ربات در حلقهٔ اصلی، بدون nested loop
-    asyncio.run(main())
+    # اجرای ربات در حلقهٔ اصلی
+    asyncio.run(run_bot())
