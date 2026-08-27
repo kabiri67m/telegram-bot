@@ -23,47 +23,112 @@ def home():
     return "Bot is running on Render!"
 
 # ============================
-#  منوی دکمه‌دار حرفه‌ای
+#  منوی اصلی
 # ============================
 
-def get_main_menu():
+def main_menu():
     return ReplyKeyboardMarkup(
         [
             ["📌 اطلاعات", "🛠 ابزارها"],
-            ["📨 تماس با پشتیبانی", "❓ راهنما"]
+            ["📨 پشتیبانی", "❓ راهنما"]
         ],
         resize_keyboard=True
     )
 
 # ============================
-#  هندلر شروع (فقط همین!)
+#  زیرمنوی اطلاعات
+# ============================
+
+def info_menu():
+    return ReplyKeyboardMarkup(
+        [
+            ["ℹ️ نسخه ربات", "👤 درباره ما"],
+            ["⬅️ بازگشت"]
+        ],
+        resize_keyboard=True
+    )
+
+# ============================
+#  زیرمنوی ابزارها
+# ============================
+
+def tools_menu():
+    return ReplyKeyboardMarkup(
+        [
+            ["🧮 ماشین حساب", "📅 زمان"],
+            ["⬅️ بازگشت"]
+        ],
+        resize_keyboard=True
+    )
+
+# ============================
+#  هندلر شروع
 # ============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "سلام محمد عزیز 🌟\nبه ربات خوش آمدی!",
-        reply_markup=get_main_menu()
+        reply_markup=main_menu()
     )
 
 # ============================
-#  هندلر پیام‌های معمولی
+#  هندلر پیام‌ها
 # ============================
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
+    # ---------------------------
+    #  منوی اصلی
+    # ---------------------------
     if text == "📌 اطلاعات":
-        await update.message.reply_text("اینجا بخش اطلاعات است 👇\nنسخه ربات: 1.0.0")
+        await update.message.reply_text(
+            "زیرمنوی اطلاعات:",
+            reply_markup=info_menu()
+        )
 
     elif text == "🛠 ابزارها":
-        await update.message.reply_text("اینجا ابزارهای ربات قرار می‌گیرند 🔧")
+        await update.message.reply_text(
+            "زیرمنوی ابزارها:",
+            reply_markup=tools_menu()
+        )
 
-    elif text == "📨 تماس با پشتیبانی":
-        await update.message.reply_text("برای تماس با پشتیبانی پیام بده: @YourSupport")
+    elif text == "📨 پشتیبانی":
+        await update.message.reply_text("برای پشتیبانی پیام بده: @YourSupport")
 
     elif text == "❓ راهنما":
         await update.message.reply_text("اینجا راهنمای استفاده از ربات قرار می‌گیرد 📘")
 
+    # ---------------------------
+    #  زیرمنوی اطلاعات
+    # ---------------------------
+    elif text == "ℹ️ نسخه ربات":
+        await update.message.reply_text("نسخه فعلی ربات: 1.0.0")
+
+    elif text == "👤 درباره ما":
+        await update.message.reply_text("این ربات توسط محمد ساخته شده است 🌟")
+
+    # ---------------------------
+    #  زیرمنوی ابزارها
+    # ---------------------------
+    elif text == "🧮 ماشین حساب":
+        await update.message.reply_text("ماشین حساب فعلاً فعال نیست 🔧")
+
+    elif text == "📅 زمان":
+        await update.message.reply_text("زمان فعلی: به‌زودی اضافه می‌شود ⏳")
+
+    # ---------------------------
+    #  بازگشت
+    # ---------------------------
+    elif text == "⬅️ بازگشت":
+        await update.message.reply_text(
+            "بازگشت به منوی اصلی:",
+            reply_markup=main_menu()
+        )
+
+    # ---------------------------
+    #  پیام‌های دیگر
+    # ---------------------------
     else:
         await update.message.reply_text("پیامت رسید 👌")
 
@@ -74,7 +139,6 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
 
-    # فقط همین دو هندلر وجود دارند
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
@@ -92,7 +156,6 @@ async def run_bot():
 if __name__ == "__main__":
     from threading import Thread
 
-    # اجرای Flask در Thread جدا برای Render
     Thread(
         target=lambda: app_web.run(
             host="0.0.0.0",
@@ -100,5 +163,4 @@ if __name__ == "__main__":
         )
     ).start()
 
-    # اجرای ربات در حلقهٔ اصلی asyncio
     asyncio.run(run_bot())
