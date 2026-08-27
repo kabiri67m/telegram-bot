@@ -28,14 +28,18 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
-    # اجرای ربات تلگرام
     print("Starting bot polling...")
-    await application.run_polling()
+
+    # به‌جای run_polling (که خودش حلقه رو مدیریت می‌کنه)، همه‌چیز رو دستی کنترل می‌کنیم:
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await application.updater.idle()
 
 if __name__ == "__main__":
-    # اجرای Flask در Thread جدا تا Render پورت باز نگه دارد
+    # اجرای Flask در Thread جدا تا Render پورت رو چک کنه
     from threading import Thread
     Thread(target=lambda: app_web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
-    # اجرای ربات در حلقهٔ اصلی asyncio
+    # اجرای ربات در حلقهٔ اصلی، بدون nested loop
     asyncio.run(main())
