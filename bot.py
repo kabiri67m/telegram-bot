@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -8,14 +9,14 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# یک وب‌سرور ساده برای Render
+# وب‌سرور ساده برای Render
 app_web = Flask(__name__)
 
 @app_web.route("/")
 def home():
     return "Bot is running on Render!"
 
-# ربات تلگرام
+# تابع اصلی ربات
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("ربات روی Render اجرا شد ✅")
 
@@ -25,9 +26,9 @@ def run_bot():
     application.run_polling()
 
 if __name__ == "__main__":
-    # اجرای وب‌سرور در یک پورت
-    from threading import Thread
-    Thread(target=run_bot).start()
+    # اجرای ربات در Thread سازگار با asyncio
+    asyncio.get_event_loop().create_task(asyncio.to_thread(run_bot))
 
+    # اجرای وب‌سرور برای Render
     port = int(os.environ.get("PORT", 5000))
     app_web.run(host="0.0.0.0", port=port)
