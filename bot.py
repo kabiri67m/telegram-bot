@@ -26,8 +26,10 @@ def run_bot():
     application.run_polling()
 
 if __name__ == "__main__":
-    # اجرای ربات در Thread سازگار با asyncio
-    asyncio.get_event_loop().create_task(asyncio.to_thread(run_bot))
+    # ساخت حلقهٔ asyncio به‌صورت دستی برای محیط ابری
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(asyncio.to_thread(run_bot))
 
     # اجرای وب‌سرور برای Render
     port = int(os.environ.get("PORT", 5000))
