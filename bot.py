@@ -30,7 +30,8 @@ def main_menu():
     return ReplyKeyboardMarkup(
         [
             ["📌 اطلاعات", "🛠 ابزارها"],
-            ["📨 پشتیبانی", "❓ راهنما"]
+            ["📨 پشتیبانی", "❓ راهنما"],
+            ["⚙️ تنظیمات"]
         ],
         resize_keyboard=True
     )
@@ -43,6 +44,7 @@ def info_menu():
     return ReplyKeyboardMarkup(
         [
             ["ℹ️ نسخه ربات", "👤 درباره ما"],
+            ["📊 وضعیت سرور"],
             ["⬅️ بازگشت"]
         ],
         resize_keyboard=True
@@ -56,7 +58,36 @@ def tools_menu():
     return ReplyKeyboardMarkup(
         [
             ["🧮 ماشین حساب", "📅 زمان"],
+            ["📝 تبدیل متن", "📷 پردازش تصویر"],
             ["⬅️ بازگشت"]
+        ],
+        resize_keyboard=True
+    )
+
+# ============================
+#  زیرمنوی تنظیمات
+# ============================
+
+def settings_menu():
+    return ReplyKeyboardMarkup(
+        [
+            ["🔔 اعلان‌ها", "🌗 حالت شب"],
+            ["👥 مدیریت کاربران"],
+            ["⬅️ بازگشت"]
+        ],
+        resize_keyboard=True
+    )
+
+# ============================
+#  زیرمنوی مدیریت کاربران
+# ============================
+
+def user_manage_menu():
+    return ReplyKeyboardMarkup(
+        [
+            ["➕ افزودن کاربر", "➖ حذف کاربر"],
+            ["📋 لیست کاربران"],
+            ["⬅️ بازگشت تنظیمات"]
         ],
         resize_keyboard=True
     )
@@ -82,16 +113,13 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #  منوی اصلی
     # ---------------------------
     if text == "📌 اطلاعات":
-        await update.message.reply_text(
-            "زیرمنوی اطلاعات:",
-            reply_markup=info_menu()
-        )
+        await update.message.reply_text("زیرمنوی اطلاعات:", reply_markup=info_menu())
 
     elif text == "🛠 ابزارها":
-        await update.message.reply_text(
-            "زیرمنوی ابزارها:",
-            reply_markup=tools_menu()
-        )
+        await update.message.reply_text("زیرمنوی ابزارها:", reply_markup=tools_menu())
+
+    elif text == "⚙️ تنظیمات":
+        await update.message.reply_text("زیرمنوی تنظیمات:", reply_markup=settings_menu())
 
     elif text == "📨 پشتیبانی":
         await update.message.reply_text("برای پشتیبانی پیام بده: @YourSupport")
@@ -103,10 +131,13 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #  زیرمنوی اطلاعات
     # ---------------------------
     elif text == "ℹ️ نسخه ربات":
-        await update.message.reply_text("نسخه فعلی ربات: 1.0.0")
+        await update.message.reply_text("نسخه فعلی ربات: 2.0.0")
 
     elif text == "👤 درباره ما":
         await update.message.reply_text("این ربات توسط محمد ساخته شده است 🌟")
+
+    elif text == "📊 وضعیت سرور":
+        await update.message.reply_text("سرور فعال است و بدون مشکل کار می‌کند ⚡")
 
     # ---------------------------
     #  زیرمنوی ابزارها
@@ -117,14 +148,44 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📅 زمان":
         await update.message.reply_text("زمان فعلی: به‌زودی اضافه می‌شود ⏳")
 
+    elif text == "📝 تبدیل متن":
+        await update.message.reply_text("بخش تبدیل متن به‌زودی فعال می‌شود 📝")
+
+    elif text == "📷 پردازش تصویر":
+        await update.message.reply_text("پردازش تصویر در نسخهٔ بعدی فعال می‌شود 📷")
+
     # ---------------------------
-    #  بازگشت
+    #  زیرمنوی تنظیمات
+    # ---------------------------
+    elif text == "🔔 اعلان‌ها":
+        await update.message.reply_text("بخش اعلان‌ها فعال شد 🔔")
+
+    elif text == "🌗 حالت شب":
+        await update.message.reply_text("حالت شب فعال شد 🌙")
+
+    elif text == "👥 مدیریت کاربران":
+        await update.message.reply_text("زیرمنوی مدیریت کاربران:", reply_markup=user_manage_menu())
+
+    # ---------------------------
+    #  زیرمنوی مدیریت کاربران
+    # ---------------------------
+    elif text == "➕ افزودن کاربر":
+        await update.message.reply_text("افزودن کاربر: به‌زودی فعال می‌شود")
+
+    elif text == "➖ حذف کاربر":
+        await update.message.reply_text("حذف کاربر: به‌زودی فعال می‌شود")
+
+    elif text == "📋 لیست کاربران":
+        await update.message.reply_text("لیست کاربران: به‌زودی فعال می‌شود")
+
+    # ---------------------------
+    #  دکمه‌های بازگشت
     # ---------------------------
     elif text == "⬅️ بازگشت":
-        await update.message.reply_text(
-            "بازگشت به منوی اصلی:",
-            reply_markup=main_menu()
-        )
+        await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu())
+
+    elif text == "⬅️ بازگشت تنظیمات":
+        await update.message.reply_text("بازگشت به تنظیمات:", reply_markup=settings_menu())
 
     # ---------------------------
     #  پیام‌های دیگر
