@@ -1,40 +1,59 @@
 import os
-import asyncio
-from dotenv import load_dotenv
+import logging
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-from flask import Flask
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
 
+# بارگذاری متغیرهای محیطی
 load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")  # فقط از Environment خونده می‌شود
+TOKEN = os.getenv("BOT_TOKEN")
 
-app_web = Flask(__name__)
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
-@app_web.route("/")
-def home():
-    return "Bot is running!"
-
-def main_menu():
-    return ReplyKeyboardMarkup([["⬅️ بازگشت"]], resize_keyboard=True)
-
+# دستور start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سلام 🌟", reply_markup=main_menu())
+    keyboard = [["سلام", "کمک"], ["راهنما", "خروج"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text("سلام محمد! 👋 ربات آماده‌ست.", reply_markup=reply_markup)
 
+# دستور help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("دستورات موجود:\n/start - شروع ربات\n/help - راهنما\nو پیام‌های متنی مثل سلام، کمک، خروج.")
+
+# پاسخ به پیام‌های متنی
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text == "⬅️ بازگشت":
-        await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu())
-        return
-    await update.message.reply_text("پیامت رسید 👌")
+    text = update.message.text.lower()
+    if "سلام" in text:
+        await update.message.reply_text("سلام! حالت چطوره؟ 😊")
+    elif "کمک" in text or "راهنما" in text:
+        await update.message.reply_text("این ربات می‌تونه پیام‌ها رو جواب بده و کیبورد نشون بده.")
+    elif "خروج" in text:
+        await update.message.reply_text("خدانگهدار 👋")
+    else:
+        await update.message.reply_text(f"پیام دریافت شد: {update.message.text}")
 
-async def run_bot():
-    application = ApplicationBuilder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.idle()
+# مدیریت خطاها
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logging.error(msg="Exception while handling update:", exc_info=context.error)
+    if update and hasattr(update, "message") and update.message:
+        await update.message.reply_text("یک خطا رخ داد 🚨")
+
+# اجرای ربات
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+
+    app.add_error_handler(error_handler)
+
+    print("ربات در حال اجراست...")
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    main()
