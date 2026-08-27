@@ -23,7 +23,7 @@ from flask import Flask
 #  تنظیمات پایه
 # ============================
 load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")  # فقط از Environment خونده می‌شود
 
 MAIN_ADMIN_ID = 1190530645
 ADMINS = set()
@@ -65,29 +65,7 @@ def init_db():
         )
     """)
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            category TEXT,
-            product TEXT,
-            quantity INTEGER,
-            status TEXT,
-            created_at TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            order_id INTEGER,
-            method TEXT,
-            status TEXT,
-            created_at TEXT
-        )
-    """)
-
+    conn.commit()
     c.execute("INSERT OR IGNORE INTO admins (id) VALUES (?)", (MAIN_ADMIN_ID,))
     conn.commit()
 
@@ -116,42 +94,6 @@ def db_get_users():
     rows = c.fetchall()
     conn.close()
     return rows
-
-def db_add_admin(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO admins (id) VALUES (?)", (user_id,))
-    conn.commit()
-    conn.close()
-    ADMINS.add(user_id)
-
-def db_remove_admin(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM admins WHERE id = ?", (user_id,))
-    conn.commit()
-    conn.close()
-    ADMINS.discard(user_id)
-
-def db_get_admins():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id FROM admins")
-    rows = c.fetchall()
-    conn.close()
-    return [r[0] for r in rows]
-
-def db_toggle_setting(user_id: int, field: str):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO settings (user_id) VALUES (?)", (user_id,))
-    c.execute(f"SELECT {field} FROM settings WHERE user_id = ?", (user_id,))
-    val = c.fetchone()[0]
-    new_val = 0 if val == 1 else 1
-    c.execute(f"UPDATE settings SET {field} = ? WHERE user_id = ?", (new_val, user_id))
-    conn.commit()
-    conn.close()
-    return new_val
 
 # ============================
 #  منوها
