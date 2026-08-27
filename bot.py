@@ -36,7 +36,7 @@ def get_main_menu():
     )
 
 # ============================
-#  هندلر شروع
+#  هندلر شروع (فقط همین!)
 # ============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,6 +74,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
 
+    # فقط همین دو هندلر وجود دارند
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
@@ -81,7 +82,6 @@ async def run_bot():
     await application.start()
     await application.updater.start_polling()
 
-    # حلقه را زنده نگه می‌داریم
     while True:
         await asyncio.sleep(1)
 
