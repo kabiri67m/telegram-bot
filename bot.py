@@ -23,23 +23,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("پیامت رسید 👌")
 
-async def run_bot():
+async def main():
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.idle()
+
+    # اجرای ربات تلگرام
+    print("Starting bot polling...")
+    await application.run_polling()
 
 if __name__ == "__main__":
-    # ساخت حلقهٔ جدید برای asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # اجرای Flask در Thread جدا تا Render پورت باز نگه دارد
+    from threading import Thread
+    Thread(target=lambda: app_web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
-    # اجرای ربات در همان حلقه
-    loop.create_task(run_bot())
-
-    # اجرای Flask برای Render
-    port = int(os.environ.get("PORT", 5000))
-    app_web.run(host="0.0.0.0", port=port)
+    # اجرای ربات در حلقهٔ اصلی asyncio
+    asyncio.run(main())
