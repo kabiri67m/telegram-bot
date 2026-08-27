@@ -1,4 +1,3 @@
-python-telegram-bot==22.8
-python-dotenv
-httpx
-flask
+python-telegram-bot==20.3
+python-dotenv==1.0.0
+flask==2.3.2
