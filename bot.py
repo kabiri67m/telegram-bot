@@ -1,11 +1,17 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     filters
 )
@@ -31,7 +37,7 @@ def main_menu():
         [
             ["📌 اطلاعات", "🛠 ابزارها"],
             ["📨 پشتیبانی", "❓ راهنما"],
-            ["⚙️ تنظیمات"]
+            ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"]
         ],
         resize_keyboard=True
     )
@@ -93,6 +99,21 @@ def user_manage_menu():
     )
 
 # ============================
+#  دکمه‌های Inline حرفه‌ای
+# ============================
+
+def inline_menu():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔗 لینک سایت", url="https://google.com"),
+            InlineKeyboardButton("📤 ارسال پیام", callback_data="send_msg")
+        ],
+        [
+            InlineKeyboardButton("❌ بستن", callback_data="close")
+        ]
+    ])
+
+# ============================
 #  هندلر شروع
 # ============================
 
@@ -103,7 +124,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ============================
-#  هندلر پیام‌ها
+#  هندلر پیام‌های معمولی
 # ============================
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,6 +147,12 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "❓ راهنما":
         await update.message.reply_text("اینجا راهنمای استفاده از ربات قرار می‌گیرد 📘")
+
+    elif text == "🔘 دکمه‌های Inline":
+        await update.message.reply_text(
+            "این هم نمونه دکمه‌های Inline:",
+            reply_markup=inline_menu()
+        )
 
     # ---------------------------
     #  زیرمنوی اطلاعات
@@ -194,6 +221,20 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("پیامت رسید 👌")
 
 # ============================
+#  هندلر دکمه‌های Inline
+# ============================
+
+async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "send_msg":
+        await query.edit_message_text("پیام ارسال شد 📤")
+
+    elif query.data == "close":
+        await query.edit_message_text("پنجره بسته شد ❌")
+
+# ============================
 #  اجرای ربات تلگرام
 # ============================
 
@@ -202,6 +243,7 @@ async def run_bot():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    application.add_handler(CallbackQueryHandler(inline_handler))
 
     await application.initialize()
     await application.start()
