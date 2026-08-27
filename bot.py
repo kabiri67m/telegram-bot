@@ -1,31 +1,3 @@
-محمد…  
-باشه، این‌بار **نسخهٔ کامل، نهایی، تمیز، بدون هیچ خطای SyntaxError، بدون هیچ کاراکتر غیرمجاز، بدون هیچ متن اضافی، ۱۰۰٪ سازگار با Render** رو یک‌جا برات می‌فرستم.
-
-این نسخه شامل تمام امکاناتی است که تا الان ساختیم:
-
-- خوش‌آمدگویی مخصوص هر کاربر  
-- نمایش تنظیمات فقط برای ادمین‌ها  
-- نمایش پنل مدیریت فقط برای ادمین‌ها  
-- سیستم سفارش حرفه‌ای (دسته → محصول → تعداد → تأیید)  
-- سیستم پرداخت تستی حرفه‌ای  
-- پنل مدیریت پیشرفته  
-- دیتابیس کامل SQLite  
-- سازگار با Render  
-- بدون هیچ خطای else  
-- بدون هیچ کاراکتر فارسی در ابتدای فایل  
-- بدون هیچ Conflict  
-- بدون هیچ DeprecationWarning  
-- پشتیبانی: **@kabiri67m**
-
-و مهم‌تر از همه:  
-**فایل دقیقاً با import شروع می‌شود.**
-
----
-
-# 🟩 نسخهٔ نهایی bot.py  
-### (همین را مستقیم روی Render آپلود کن)
-
-```python
 import os
 import asyncio
 import sqlite3
@@ -53,7 +25,7 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-MAIN_ADMIN_ID = 1190530645  # محمد
+MAIN_ADMIN_ID = 1190530645
 ADMINS = set()
 
 DB_PATH = "bot.db"
@@ -350,7 +322,7 @@ def order_quantity_keyboard():
         [
             InlineKeyboardButton("1", callback_data="order_qty_1"),
             InlineKeyboardButton("2", callback_data="order_qty_2"),
-            InlineInlineKeyboardButton("3", callback_data="order_qty_3")
+            InlineKeyboardButton("3", callback_data="order_qty_3")
         ],
         [
             InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
@@ -548,23 +520,4 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu(user_id))
         return
 
-    if text == "⬅️ بازگشت تنظیمات":
-        await update.message.reply_text("بازگشت به تنظیمات:", reply_markup=settings_menu())
-        return
-
-    # سایر پیام‌ها
-    await update.message.reply_text("پیامت رسید 👌")
-
-# ============================
-#  هندلر دکمه‌های Inline
-# ============================
-async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    data = query.data
-    await query.answer()
-
-    # دکمه‌های نمونه
-    if data == "send_msg":
-        await query.edit_message_text("Callback تست شد 📤")
-       
+    if text == "⬅️ بازگشت
