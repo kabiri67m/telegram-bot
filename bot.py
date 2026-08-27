@@ -21,9 +21,11 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# ادمین دائمی (تو)
-MAIN_ADMIN = None  # بعد از اولین /start مقدارش ذخیره می‌شود
-ADMINS = set()
+# ============================
+#  ادمین دائمی (محمد)
+# ============================
+MAIN_ADMIN_ID = 1190530645
+ADMINS = {MAIN_ADMIN_ID}
 
 # وب‌سرور برای Render
 app_web = Flask(__name__)
@@ -129,17 +131,6 @@ def inline_menu():
 # ============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global MAIN_ADMIN
-
-    user_id = update.message.from_user.id
-
-    # اولین کسی که /start می‌زند → ادمین دائمی
-    if MAIN_ADMIN is None:
-        MAIN_ADMIN = user_id
-
-    # همیشه تو را ادمین نگه می‌داریم
-    ADMINS.add(MAIN_ADMIN)
-
     await update.message.reply_text(
         "سلام محمد عزیز 🌟\nبه ربات خوش آمدی!",
         reply_markup=main_menu()
