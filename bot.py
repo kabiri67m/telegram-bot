@@ -21,6 +21,9 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
+# لیست ادمین‌ها (فعلاً داخل حافظه)
+ADMINS = set()  # مثال: {"123456789"}
+
 # وب‌سرور برای Render
 app_web = Flask(__name__)
 
@@ -37,7 +40,8 @@ def main_menu():
         [
             ["📌 اطلاعات", "🛠 ابزارها"],
             ["📨 پشتیبانی", "❓ راهنما"],
-            ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"]
+            ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"],
+            ["👑 پنل مدیریت"]
         ],
         resize_keyboard=True
     )
@@ -99,7 +103,25 @@ def user_manage_menu():
     )
 
 # ============================
-#  دکمه‌های Inline حرفه‌ای
+#  پنل مدیریت ادمین (Inline)
+# ============================
+
+def admin_panel():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("➕ افزودن ادمین", callback_data="add_admin"),
+            InlineKeyboardButton("➖ حذف ادمین", callback_data="remove_admin")
+        ],
+        [
+            InlineKeyboardButton("📋 لیست ادمین‌ها", callback_data="list_admins")
+        ],
+        [
+            InlineKeyboardButton("❌ بستن", callback_data="close_admin")
+        ]
+    ])
+
+# ============================
+#  دکمه‌های Inline نمونه
 # ============================
 
 def inline_menu():
@@ -118,6 +140,9 @@ def inline_menu():
 # ============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    ADMINS.add(user_id)  # اولین کسی که /start می‌زند ادمین می‌شود
+
     await update.message.reply_text(
         "سلام محمد عزیز 🌟\nبه ربات خوش آمدی!",
         reply_markup=main_menu()
@@ -129,6 +154,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+    user_id = update.message.from_user.id
+
+    # ---------------------------
+    #  پنل مدیریت
+    # ---------------------------
+    if text == "👑 پنل مدیریت":
+        if user_id not in ADMINS:
+            await update.message.reply_text("❌ شما ادمین نیستید!")
+            return
+
+        await update.message.reply_text(
+            "پنل مدیریت:",
+            reply_markup=admin_panel()
+        )
+        return
 
     # ---------------------------
     #  منوی اصلی
@@ -158,7 +198,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #  زیرمنوی اطلاعات
     # ---------------------------
     elif text == "ℹ️ نسخه ربات":
-        await update.message.reply_text("نسخه فعلی ربات: 2.0.0")
+        await update.message.reply_text("نسخه فعلی ربات: 3.0.0")
 
     elif text == "👤 درباره ما":
         await update.message.reply_text("این ربات توسط محمد ساخته شده است 🌟")
@@ -214,9 +254,6 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "⬅️ بازگشت تنظیمات":
         await update.message.reply_text("بازگشت به تنظیمات:", reply_markup=settings_menu())
 
-    # ---------------------------
-    #  پیام‌های دیگر
-    # ---------------------------
     else:
         await update.message.reply_text("پیامت رسید 👌")
 
@@ -226,13 +263,35 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    user_id = query.from_user.id
     await query.answer()
 
+    # ---------------------------
+    #  دکمه‌های نمونه
+    # ---------------------------
     if query.data == "send_msg":
         await query.edit_message_text("پیام ارسال شد 📤")
 
     elif query.data == "close":
         await query.edit_message_text("پنجره بسته شد ❌")
+
+    # ---------------------------
+    #  پنل مدیریت
+    # ---------------------------
+    elif query.data == "add_admin":
+        ADMINS.add(user_id)
+        await query.edit_message_text("✔ شما به لیست ادمین‌ها اضافه شدید")
+
+    elif query.data == "remove_admin":
+        ADMINS.discard(user_id)
+        await query.edit_message_text("❌ شما از لیست ادمین‌ها حذف شدید")
+
+    elif query.data == "list_admins":
+        admin_list = "\n".join(str(a) for a in ADMINS)
+        await query.edit_message_text(f"📋 لیست ادمین‌ها:\n{admin_list}")
+
+    elif query.data == "close_admin":
+        await query.edit_message_text("پنل مدیریت بسته شد ❌")
 
 # ============================
 #  اجرای ربات تلگرام
