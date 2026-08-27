@@ -1,6 +1,7 @@
 import os
 import asyncio
 import sqlite3
+from datetime import datetime
 from dotenv import load_dotenv
 from telegram import (
     Update,
@@ -33,7 +34,7 @@ app_web = Flask(__name__)
 
 @app_web.route("/")
 def home():
-    return "Commercial bot running!"
+    return "Commercial test bot running!"
 
 # ============================
 #  دیتابیس
@@ -64,6 +65,29 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            category TEXT,
+            product TEXT,
+            quantity INTEGER,
+            status TEXT,
+            created_at TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            order_id INTEGER,
+            method TEXT,
+            status TEXT,
+            created_at TEXT
+        )
+    """)
+
     c.execute("INSERT OR IGNORE INTO admins (id) VALUES (?)", (MAIN_ADMIN_ID,))
     conn.commit()
 
@@ -74,9 +98,10 @@ def init_db():
 
     conn.close()
 
-def db_add_user(user_id: int, name: str, ts: str):
+def db_add_user(user_id: int, name: str):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    ts = datetime.utcnow().isoformat()
     c.execute(
         "INSERT OR REPLACE INTO users (id, name, registered_at) VALUES (?, ?, ?)",
         (user_id, name, ts)
@@ -128,6 +153,48 @@ def db_toggle_setting(user_id: int, field: str):
     conn.close()
     return new_val
 
+def db_create_order(user_id: int, category: str, product: str, quantity: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    ts = datetime.utcnow().isoformat()
+    c.execute(
+        "INSERT INTO orders (user_id, category, product, quantity, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, category, product, quantity, "pending", ts)
+    )
+    order_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return order_id
+
+def db_get_orders():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, user_id, category, product, quantity, status, created_at FROM orders")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def db_create_payment(user_id: int, order_id: int, method: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    ts = datetime.utcnow().isoformat()
+    c.execute(
+        "INSERT INTO payments (user_id, order_id, method, status, created_at) VALUES (?, ?, ?, ?, ?)",
+        (user_id, order_id, method, "paid_test", ts)
+    )
+    payment_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return payment_id
+
+def db_get_payments():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, user_id, order_id, method, status, created_at FROM payments")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
 # ============================
 #  منوها
 # ============================
@@ -135,7 +202,8 @@ def main_menu():
     return ReplyKeyboardMarkup(
         [
             ["📌 اطلاعات", "🛠 ابزارها"],
-            ["📝 ثبت‌نام", "📨 پشتیبانی"],
+            ["📝 ثبت‌نام", "🛒 ثبت سفارش"],
+            ["💳 پرداخت تستی", "📨 پشتیبانی"],
             ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"],
             ["👑 پنل مدیریت"]
         ],
@@ -188,6 +256,10 @@ def admin_panel():
             InlineKeyboardButton("📋 لیست کاربران", callback_data="list_users")
         ],
         [
+            InlineKeyboardButton("📋 لیست سفارش‌ها", callback_data="list_orders"),
+            InlineKeyboardButton("📋 لیست پرداخت‌ها", callback_data="list_payments")
+        ],
+        [
             InlineKeyboardButton("➕ افزودن خودم به ادمین‌ها", callback_data="self_add_admin"),
             InlineKeyboardButton("➖ حذف خودم از ادمین‌ها", callback_data="self_remove_admin")
         ],
@@ -208,11 +280,91 @@ def inline_menu():
     ])
 
 # ============================
+#  فرم سفارش حرفه‌ای (Inline)
+# ============================
+def order_category_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📦 دسته A", callback_data="order_cat_A"),
+            InlineKeyboardButton("📦 دسته B", callback_data="order_cat_B")
+        ],
+        [
+            InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
+        ]
+    ])
+
+def order_product_keyboard(category: str):
+    if category == "A":
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("محصول A1", callback_data="order_prod_A1"),
+                InlineKeyboardButton("محصول A2", callback_data="order_prod_A2")
+            ],
+            [
+                InlineKeyboardButton("⬅️ بازگشت به دسته", callback_data="order_back_cat"),
+                InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
+            ]
+        ])
+    else:
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("محصول B1", callback_data="order_prod_B1"),
+                InlineKeyboardButton("محصول B2", callback_data="order_prod_B2")
+            ],
+            [
+                InlineKeyboardButton("⬅️ بازگشت به دسته", callback_data="order_back_cat"),
+                InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
+            ]
+        ])
+
+def order_quantity_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("1", callback_data="order_qty_1"),
+            InlineKeyboardButton("2", callback_data="order_qty_2"),
+            InlineKeyboardButton("3", callback_data="order_qty_3")
+        ],
+        [
+            InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
+        ]
+    ])
+
+def order_confirm_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✔ تأیید سفارش", callback_data="order_confirm"),
+            InlineKeyboardButton("❌ لغو سفارش", callback_data="order_cancel")
+        ]
+    ])
+
+# ============================
+#  سیستم پرداخت تستی (Inline)
+# ============================
+def payment_method_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💳 کارت", callback_data="pay_method_card"),
+            InlineKeyboardButton("💵 نقدی", callback_data="pay_method_cash")
+        ],
+        [
+            InlineKeyboardButton("❌ لغو پرداخت", callback_data="pay_cancel")
+        ]
+    ])
+
+def payment_confirm_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✔ تأیید پرداخت", callback_data="pay_confirm"),
+            InlineKeyboardButton("❌ لغو پرداخت", callback_data="pay_cancel")
+        ]
+    ])
+
+# ============================
 #  هندلر شروع
 # ============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "سلام محمد عزیز 🌟\nاین نسخهٔ حرفه‌ای تجاری رباته.",
+        "سلام محمد عزیز 🌟\nاین نسخهٔ تستی حرفه‌ای نمونه‌کار تجاریه.",
         reply_markup=main_menu()
     )
 
@@ -229,9 +381,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not name:
             await update.message.reply_text("لطفاً یک نام معتبر وارد کن.")
             return
-        from datetime import datetime
-        ts = datetime.utcnow().isoformat()
-        db_add_user(user_id, name, ts)
+        db_add_user(user_id, name)
         context.user_data["state"] = None
         await update.message.reply_text(
             f"ثبت‌نام انجام شد ✅\nنام: {name}",
@@ -251,6 +401,28 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "📝 ثبت‌نام":
         context.user_data["state"] = "register_name"
         await update.message.reply_text("لطفاً نام خودت را بفرست:")
+        return
+
+    # شروع سفارش حرفه‌ای
+    if text == "🛒 ثبت سفارش":
+        context.user_data["order"] = {}
+        await update.message.reply_text(
+            "لطفاً دستهٔ محصول را انتخاب کن:",
+            reply_markup=order_category_keyboard()
+        )
+        return
+
+    # شروع پرداخت تستی حرفه‌ای
+    if text == "💳 پرداخت تستی":
+        last_order_id = context.user_data.get("last_order_id")
+        if not last_order_id:
+            await update.message.reply_text("هیچ سفارشی برای پرداخت ثبت نشده.")
+            return
+        context.user_data["payment"] = {"order_id": last_order_id}
+        await update.message.reply_text(
+            "لطفاً روش پرداخت را انتخاب کن:",
+            reply_markup=payment_method_keyboard()
+        )
         return
 
     # منوی اصلی
@@ -280,7 +452,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # زیرمنوی اطلاعات
     if text == "ℹ️ نسخه ربات":
-        await update.message.reply_text("نسخه فعلی ربات: 1.0.0 (Commercial Demo)")
+        await update.message.reply_text("نسخه فعلی ربات: 1.0.0 (Commercial Test)")
         return
 
     if text == "👤 درباره ما":
@@ -355,17 +527,20 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
+    data = query.data
     await query.answer()
 
-    if query.data == "send_msg":
+    # دکمه‌های نمونه
+    if data == "send_msg":
         await query.edit_message_text("Callback تست شد 📤")
         return
 
-    if query.data == "close":
+    if data == "close":
         await query.edit_message_text("پنجره بسته شد ❌")
         return
 
-    if query.data == "list_admins":
+    # پنل مدیریت
+    if data == "list_admins":
         admins = db_get_admins()
         msg = "📋 لیست ادمین‌ها:\n"
         for a in admins:
@@ -374,7 +549,7 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(msg)
         return
 
-    if query.data == "list_users":
+    if data == "list_users":
         users = db_get_users()
         if not users:
             await query.edit_message_text("هیچ کاربری ثبت‌نام نکرده هنوز.")
@@ -385,12 +560,34 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(msg)
         return
 
-    if query.data == "self_add_admin":
+    if data == "list_orders":
+        orders = db_get_orders()
+        if not orders:
+            await query.edit_message_text("هیچ سفارشی ثبت نشده.")
+        else:
+            msg = "📋 لیست سفارش‌ها:\n"
+            for oid, uid, cat, prod, qty, status, ts in orders:
+                msg += f"- #{oid} | کاربر {uid} | {cat}/{prod} x{qty} | {status} | {ts}\n"
+            await query.edit_message_text(msg)
+        return
+
+    if data == "list_payments":
+        payments = db_get_payments()
+        if not payments:
+            await query.edit_message_text("هیچ پرداختی ثبت نشده.")
+        else:
+            msg = "📋 لیست پرداخت‌ها:\n"
+            for pid, uid, oid, method, status, ts in payments:
+                msg += f"- #{pid} | کاربر {uid} | سفارش #{oid} | {method} | {status} | {ts}\n"
+            await query.edit_message_text(msg)
+        return
+
+    if data == "self_add_admin":
         db_add_admin(user_id)
         await query.edit_message_text("✔ شما به لیست ادمین‌ها اضافه شدید.")
         return
 
-    if query.data == "self_remove_admin":
+    if data == "self_remove_admin":
         if user_id == MAIN_ADMIN_ID:
             await query.edit_message_text("❌ ادمین اصلی قابل حذف نیست.")
         else:
@@ -398,8 +595,124 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ شما از لیست ادمین‌ها حذف شدید.")
         return
 
-    if query.data == "close_admin":
+    if data == "close_admin":
         await query.edit_message_text("پنل مدیریت بسته شد ❌")
+        return
+
+    # فرم سفارش حرفه‌ای
+    order = context.user_data.get("order", {})
+
+    if data == "order_cat_A":
+        order["category"] = "A"
+        context.user_data["order"] = order
+        await query.edit_message_text(
+            "دسته A انتخاب شد.\nلطفاً محصول را انتخاب کن:",
+            reply_markup=order_product_keyboard("A")
+        )
+        return
+
+    if data == "order_cat_B":
+        order["category"] = "B"
+        context.user_data["order"] = order
+        await query.edit_message_text(
+            "دسته B انتخاب شد.\nلطفاً محصول را انتخاب کن:",
+            reply_markup=order_product_keyboard("B")
+        )
+        return
+
+    if data == "order_back_cat":
+        await query.edit_message_text(
+            "لطفاً دستهٔ محصول را انتخاب کن:",
+            reply_markup=order_category_keyboard()
+        )
+        return
+
+    if data.startswith("order_prod_"):
+        prod_map = {
+            "order_prod_A1": "محصول A1",
+            "order_prod_A2": "محصول A2",
+            "order_prod_B1": "محصول B1",
+            "order_prod_B2": "محصول B2",
+        }
+        product = prod_map.get(data, "نامشخص")
+        order["product"] = product
+        context.user_data["order"] = order
+        await query.edit_message_text(
+            f"محصول انتخاب شد: {product}\nلطفاً تعداد را انتخاب کن:",
+            reply_markup=order_quantity_keyboard()
+        )
+        return
+
+    if data.startswith("order_qty_"):
+        qty_map = {
+            "order_qty_1": 1,
+            "order_qty_2": 2,
+            "order_qty_3": 3,
+        }
+        quantity = qty_map.get(data, 1)
+        order["quantity"] = quantity
+        context.user_data["order"] = order
+        summary = f"خلاصه سفارش:\nدسته: {order.get('category')}\nمحصول: {order.get('product')}\nتعداد: {order.get('quantity')}"
+        await query.edit_message_text(
+            summary + "\nآیا تأیید می‌کنی؟",
+            reply_markup=order_confirm_keyboard()
+        )
+        return
+
+    if data == "order_confirm":
+        if not order.get("category") or not order.get("product") or not order.get("quantity"):
+            await query.edit_message_text("اطلاعات سفارش ناقص است.")
+            return
+        order_id = db_create_order(user_id, order["category"], order["product"], order["quantity"])
+        context.user_data["last_order_id"] = order_id
+        context.user_data["order"] = {}
+        await query.edit_message_text(
+            f"سفارش ثبت شد ✅\nشماره سفارش: #{order_id}\nبرای پرداخت تستی از منو «💳 پرداخت تستی» استفاده کن."
+        )
+        return
+
+    if data == "order_cancel":
+        context.user_data["order"] = {}
+        await query.edit_message_text("سفارش لغو شد ❌")
+        return
+
+    # سیستم پرداخت تستی حرفه‌ای
+    payment = context.user_data.get("payment", {})
+
+    if data == "pay_method_card":
+        payment["method"] = "کارت"
+        context.user_data["payment"] = payment
+        await query.edit_message_text(
+            "روش پرداخت: کارت 💳\nآیا تأیید می‌کنی؟",
+            reply_markup=payment_confirm_keyboard()
+        )
+        return
+
+    if data == "pay_method_cash":
+        payment["method"] = "نقدی"
+        context.user_data["payment"] = payment
+        await query.edit_message_text(
+            "روش پرداخت: نقدی 💵\nآیا تأیید می‌کنی؟",
+            reply_markup=payment_confirm_keyboard()
+        )
+        return
+
+    if data == "pay_confirm":
+        order_id = payment.get("order_id")
+        method = payment.get("method")
+        if not order_id or not method:
+            await query.edit_message_text("اطلاعات پرداخت ناقص است.")
+            return
+        payment_id = db_create_payment(user_id, order_id, method)
+        context.user_data["payment"] = {}
+        await query.edit_message_text(
+            f"پرداخت تستی ثبت شد ✅\nشماره پرداخت: #{payment_id}\nسفارش #{order_id} با روش {method} پرداخت شد (تستی)."
+        )
+        return
+
+    if data == "pay_cancel":
+        context.user_data["payment"] = {}
+        await query.edit_message_text("پرداخت لغو شد ❌")
         return
 
 # ============================
