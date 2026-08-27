@@ -1,13 +1,23 @@
 import logging
+from flask import Flask
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import os
+import threading
 
-# فعال‌سازی لاگ برای دیباگ
+# فعال‌سازی لاگ
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Flask app برای باز کردن پورت
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Telegram bot is running!"
 
 # دستور /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -29,19 +39,16 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(msg="Exception while handling update:", exc_info=context.error)
 
-def main() -> None:
-    # توکن رباتت رو اینجا بذار
-    application = Application.builder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
-
-    # اضافه کردن هندلرها
+def run_bot():
+    token = os.environ.get("BOT_TOKEN")  # توکن رو در Environment Variable بذار
+    application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-
-    # هندلر خطا
     application.add_error_handler(error_handler)
-
-    # اجرای ربات
     application.run_polling()
 
 if __name__ == "__main__":
-    main()
+    # اجرای ربات در یک Thread جدا
+    threading.Thread(target=run_bot).start()
+    # اجرای Flask روی پورت Render
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
