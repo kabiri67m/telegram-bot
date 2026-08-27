@@ -21,8 +21,9 @@ from flask import Flask
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# لیست ادمین‌ها (فعلاً داخل حافظه)
-ADMINS = set()  # مثال: {"123456789"}
+# ادمین دائمی (تو)
+MAIN_ADMIN = None  # بعد از اولین /start مقدارش ذخیره می‌شود
+ADMINS = set()
 
 # وب‌سرور برای Render
 app_web = Flask(__name__)
@@ -47,7 +48,7 @@ def main_menu():
     )
 
 # ============================
-#  زیرمنوی اطلاعات
+#  زیرمنوها
 # ============================
 
 def info_menu():
@@ -60,10 +61,6 @@ def info_menu():
         resize_keyboard=True
     )
 
-# ============================
-#  زیرمنوی ابزارها
-# ============================
-
 def tools_menu():
     return ReplyKeyboardMarkup(
         [
@@ -74,10 +71,6 @@ def tools_menu():
         resize_keyboard=True
     )
 
-# ============================
-#  زیرمنوی تنظیمات
-# ============================
-
 def settings_menu():
     return ReplyKeyboardMarkup(
         [
@@ -87,10 +80,6 @@ def settings_menu():
         ],
         resize_keyboard=True
     )
-
-# ============================
-#  زیرمنوی مدیریت کاربران
-# ============================
 
 def user_manage_menu():
     return ReplyKeyboardMarkup(
@@ -103,7 +92,7 @@ def user_manage_menu():
     )
 
 # ============================
-#  پنل مدیریت ادمین (Inline)
+#  پنل مدیریت (Inline)
 # ============================
 
 def admin_panel():
@@ -140,8 +129,16 @@ def inline_menu():
 # ============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global MAIN_ADMIN
+
     user_id = update.message.from_user.id
-    ADMINS.add(user_id)  # اولین کسی که /start می‌زند ادمین می‌شود
+
+    # اولین کسی که /start می‌زند → ادمین دائمی
+    if MAIN_ADMIN is None:
+        MAIN_ADMIN = user_id
+
+    # همیشه تو را ادمین نگه می‌داریم
+    ADMINS.add(MAIN_ADMIN)
 
     await update.message.reply_text(
         "سلام محمد عزیز 🌟\nبه ربات خوش آمدی!",
@@ -149,7 +146,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ============================
-#  هندلر پیام‌های معمولی
+#  هندلر پیام‌ها
 # ============================
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,7 +201,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("این ربات توسط محمد ساخته شده است 🌟")
 
     elif text == "📊 وضعیت سرور":
-        await update.message.reply_text("سرور فعال است و بدون مشکل کار می‌کند ⚡")
+        await update.message.reply_text("سرور فعال است ⚡")
 
     # ---------------------------
     #  زیرمنوی ابزارها
