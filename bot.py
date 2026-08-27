@@ -198,17 +198,16 @@ def db_get_payments():
 # ============================
 #  منوها
 # ============================
-def main_menu():
-    return ReplyKeyboardMarkup(
-        [
-            ["📌 اطلاعات", "🛠 ابزارها"],
-            ["📝 ثبت‌نام", "🛒 ثبت سفارش"],
-            ["💳 پرداخت تستی", "📨 پشتیبانی"],
-            ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"],
-            ["👑 پنل مدیریت"]
-        ],
-        resize_keyboard=True
-    )
+def main_menu(user_id: int):
+    buttons = [
+        ["📌 اطلاعات", "🛠 ابزارها"],
+        ["📝 ثبت‌نام", "🛒 ثبت سفارش"],
+        ["💳 پرداخت تستی", "📨 پشتیبانی"],
+        ["⚙️ تنظیمات", "🔘 دکمه‌های Inline"]
+    ]
+    if user_id in ADMINS:
+        buttons.append(["👑 پنل مدیریت"])
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 def info_menu():
     return ReplyKeyboardMarkup(
@@ -363,9 +362,11 @@ def payment_confirm_keyboard():
 #  هندلر شروع
 # ============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    name = user.first_name
     await update.message.reply_text(
-        "سلام محمد عزیز 🌟\nاین نسخهٔ تستی حرفه‌ای نمونه‌کار تجاریه.",
-        reply_markup=main_menu()
+        f"سلام {name} عزیز 🌟\nبه ربات خوش آمدی!",
+        reply_markup=main_menu(user.id)
     )
 
 # ============================
@@ -385,7 +386,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = None
         await update.message.reply_text(
             f"ثبت‌نام انجام شد ✅\nنام: {name}",
-            reply_markup=main_menu()
+            reply_markup=main_menu(user_id)
         )
         return
 
@@ -511,7 +512,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # بازگشت
     if text == "⬅️ بازگشت":
-        await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu())
+        await update.message.reply_text("بازگشت به منوی اصلی:", reply_markup=main_menu(user_id))
         return
 
     if text == "⬅️ بازگشت تنظیمات":
