@@ -1,5 +1,5 @@
 import os
-import asyncio
+import threading
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -30,13 +30,10 @@ def run_bot():
     application.run_polling()
 
 if __name__ == "__main__":
-    # ساخت حلقهٔ asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # اجرای ربات در Thread جداگانه
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.start()
 
-    # اجرای ربات در Thread سازگار
-    loop.create_task(asyncio.to_thread(run_bot))
-
-    # اجرای وب‌سرور
+    # اجرای Flask برای Render
     port = int(os.environ.get("PORT", 5000))
     app_web.run(host="0.0.0.0", port=port)
