@@ -4,7 +4,7 @@ import threading
 import time
 from collections import defaultdict
 from flask import Flask
-from telegram import Update, ChatPermissions
+from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ChatMemberHandler,
     ContextTypes, filters
@@ -18,7 +18,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# کلمات ممنوعه (لیست قوی‌تر)
 FORBIDDEN_WORDS = [
     "کص", "کس", "کیر", "کون", "جنده", "کسکش", "دیوث", "مادرجنده",
     "کثافت", "حرومزاده", "حرومی", "لاشی", "جیش", "شاش", "گایید",
@@ -27,25 +26,21 @@ FORBIDDEN_WORDS = [
     "کصکش", "کسخوار", "جنده‌خانه", "مادرقحبه"
 ]
 
-# ضد سیل سریع
 FLOOD_LIMIT = 6
 FLOOD_TIME = 7
 user_messages = defaultdict(list)
 
-# قفل محتوا
 group_locks = defaultdict(lambda: {
     "photo": False,
     "video": False,
     "sticker": False,
     "animation": False,
     "document": False,
-    "link": True,  # لینک به صورت پیش‌فرض قفل است
+    "link": True,
 })
 
-# سیستم اخطار
 warnings = defaultdict(int)
 
-# Slow Mode
 slowmode_settings = defaultdict(lambda: {"enabled": False, "interval": 60})
 last_message_time = defaultdict(float)
 
@@ -68,10 +63,7 @@ def home():
 # -------------------- توابع کمکی --------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
-        member = await context.bot.get_chat_member(
-            update.effective_chat.id,
-            update.effective_user.id
-        )
+        member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
         return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
     except Exception:
         return False
@@ -180,9 +172,8 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             last_message_time[key] = now
 
-    # ---------- تشخیص لینک (قوی‌تر) ----------
+    # ---------- تشخیص لینک ----------
     has_link = False
-
     if message.entities:
         for entity in message.entities:
             if entity.type in ["url", "text_link"]:
@@ -196,10 +187,7 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if group_locks[chat_id]["link"] and has_link:
         await delete_msg(update)
         try:
-            await context.bot.send_message(
-                chat_id,
-                f"🔗 {user.first_name} عزیز، ارسال لینک در این گروه مجاز نیست."
-            )
+            await context.bot.send_message(chat_id, f"🔗 {user.first_name} عزیز، ارسال لینک در این گروه مجاز نیست.")
         except:
             pass
         return
@@ -212,11 +200,7 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             count = warnings[(chat_id, user.id)]
 
             try:
-                await context.bot.send_message(
-                    chat_id,
-                    f"🚫 {user.first_name} جان، از کلمات نامناسب استفاده نکن.\n"
-                    f"اخطار {count} از ۳"
-                )
+                await context.bot.send_message(chat_id, f"🚫 {user.first_name} جان، از کلمات نامناسب استفاده نکن.\nاخطار {count} از ۳")
             except:
                 pass
 
@@ -230,14 +214,12 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------- قفل محتوا ----------
     locks = group_locks[chat_id]
-    if (locks["photo"] and message.photo) or \
-       (locks["video"] and message.video) or \
-       (locks["sticker"] and message.sticker) or \
-       (locks["animation"] and message.animation) or \
+    if (locks["photo"] and message.photo) or (locks["video"] and message.video) or \
+       (locks["sticker"] and message.sticker) or (locks["animation"] and message.animation) or \
        (locks["document"] and message.document):
         await delete_msg(update)
 
-# -------------------- دستور Slow Mode --------------------
+# -------------------- دستورات اصلی --------------------
 async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
@@ -248,16 +230,12 @@ async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args:
         settings = slowmode_settings[chat_id]
         if settings["enabled"]:
-            await update.message.reply_text(
-                f"⏳ محدودیت ارسال پیام **فعال** است.\n"
-                f"فاصله مجاز: هر {format_time(settings['interval'])} یک پیام"
-            )
+            await update.message.reply_text(f"⏳ محدودیت ارسال پیام **فعال** است.\nفاصله مجاز: هر {format_time(settings['interval'])} یک پیام")
         else:
             await update.message.reply_text("⏳ محدودیت ارسال پیام در حال حاضر **خاموش** است.")
         return
 
     command = args[0].lower()
-
     if command == "off":
         slowmode_settings[chat_id]["enabled"] = False
         await update.message.reply_text("✅ محدودیت ارسال پیام خاموش شد.")
@@ -266,26 +244,11 @@ async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if command in TIME_MAP:
         slowmode_settings[chat_id]["enabled"] = True
         slowmode_settings[chat_id]["interval"] = TIME_MAP[command]
-        await update.message.reply_text(
-            f"✅ محدودیت ارسال پیام فعال شد.\n"
-            f"هر کاربر هر {format_time(TIME_MAP[command])} می‌تونه یک پیام بفرسته."
-        )
+        await update.message.reply_text(f"✅ محدودیت ارسال پیام فعال شد.\nهر کاربر هر {format_time(TIME_MAP[command])} می‌تونه یک پیام بفرسته.")
         return
 
-    await update.message.reply_text(
-        "فرمت درست نیست.\n\n"
-        "مثال‌های درست:\n"
-        "/slowmode off\n"
-        "/slowmode 30s\n"
-        "/slowmode 1m\n"
-        "/slowmode 5m\n"
-        "/slowmode 15m\n"
-        "/slowmode 1h\n"
-        "/slowmode 6h\n"
-        "/slowmode 1d"
-    )
+    await update.message.reply_text("فرمت درست نیست.\n\nمثال:\n/slowmode 1m\n/slowmode 30s")
 
-# -------------------- دستورات مدیریتی --------------------
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
@@ -319,10 +282,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user = update.message.reply_to_message.from_user
     try:
-        await context.bot.restrict_chat_member(
-            update.effective_chat.id, user.id,
-            permissions=ChatPermissions(can_send_messages=False)
-        )
+        await context.bot.restrict_chat_member(update.effective_chat.id, user.id, permissions=ChatPermissions(can_send_messages=False))
         await update.message.reply_text(f"🔇 کاربر {user.first_name} میوت شد.")
     except Exception as e:
         await update.message.reply_text(f"خطا: {e}")
@@ -335,15 +295,9 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user = update.message.reply_to_message.from_user
     try:
-        await context.bot.restrict_chat_member(
-            update.effective_chat.id, user.id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True
-            )
-        )
+        await context.bot.restrict_chat_member(update.effective_chat.id, user.id, permissions=ChatPermissions(
+            can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True
+        ))
         await update.message.reply_text(f"🔊 کاربر {user.first_name} آنمیوت شد.")
     except Exception as e:
         await update.message.reply_text(f"خطا: {e}")
@@ -359,9 +313,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     warnings[(chat_id, user.id)] += 1
     count = warnings[(chat_id, user.id)]
     
-    await update.message.reply_text(
-        f"⚠️ اخطار به {user.first_name}\nتعداد اخطار: {count} از ۳"
-    )
+    await update.message.reply_text(f"⚠️ اخطار به {user.first_name}\nتعداد اخطار: {count} از ۳")
     
     if count >= 3:
         try:
@@ -384,11 +336,67 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(text)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "سلام! من ربات مدیریت گروه هستم.\n"
-        "مرا به گروه اضافه کنید و ادمین کنید تا بتونم کمکتون کنم."
+# -------------------- منو خصوصی (بدون هیچ سلام یا خداحافظ) --------------------
+async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [InlineKeyboardButton("🔄 Slow Mode", callback_data="slowmode_menu")],
+        [InlineKeyboardButton("🛑 کلمات ممنوعه", callback_data="forbidden_words")],
+        [InlineKeyboardButton("📷 قفل محتوا", callback_data="lock_menu")],
+        [InlineKeyboardButton("❌ ریست تنظیمات", callback_data="reset_settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "⚙️ تنظیمات گروه:\n\n"
+        "از دکمه‌ها انتخاب کن تا تنظیمات تغییر کنه.",
+        reply_markup=reply_markup
     )
+
+async def slowmode_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [InlineKeyboardButton("✅ خاموش", callback_data="slow_off")],
+        [InlineKeyboardButton("30 ثانیه", callback_data="slow_30s")],
+        [InlineKeyboardButton("۱ دقیقه", callback_data="slow_1m")],
+        [InlineKeyboardButton("۵ دقیقه", callback_data="slow_5m")],
+        [InlineKeyboardButton("۱ ساعت", callback_data="slow_1h")],
+        [InlineKeyboardButton("۱ روز", callback_data="slow_1d")],
+        [InlineKeyboardButton("بازگشت به تنظیمات", callback_data="settings_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "⏳ Slow Mode (محدویت ارسال پیام):\n"
+        "هر کاربر فقط یک پیام در هر X ثانیه می‌تونه بفرسته.",
+        reply_markup=reply_markup
+    )
+
+async def forbidden_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text("🛑 کلمات ممنوعه:\n\nلیست فعلی:\nکص، کیر، کون، جنده، دیوث، مادرجنده و...\nبرای تغییر بعداً می‌تونیم لیست رو ویرایش کنیم.")
+
+async def lock_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text("📷 قفل محتوا:\n\nعکس، ویدیو، استیکر و... در گروه قفل می‌شن.\nبرای تغییر بعداً می‌تونیم لیست کنیم.")
+
+async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    for chat_id in list(slowmode_settings.keys()):
+        slowmode_settings[chat_id]["enabled"] = False
+        slowmode_settings[chat_id]["interval"] = 60
+
+    await query.edit_message_text("✅ تنظیمات به حالت پیش‌فرض برگردانده شد.")
 
 # -------------------- اجرا --------------------
 def run_flask():
@@ -405,7 +413,6 @@ if __name__ == "__main__":
 
     application = Application.builder().token(token).build()
 
-    application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("ban", ban))
     application.add_handler(CommandHandler("unban", unban))
     application.add_handler(CommandHandler("mute", mute))
@@ -417,6 +424,13 @@ if __name__ == "__main__":
     application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, filter_message), group=1)
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, check_flood), group=2)
+
+    # منو
+    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, settings_menu), group=3)
+    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, slowmode_menu), group=4)
+    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, forbidden_words), group=5)
+    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, lock_menu), group=6)
+    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, reset_settings), group=7)
 
     logger.info("ربات مدیریت گروه شروع به کار کرد...")
     application.run_polling(
