@@ -60,6 +60,10 @@ app = Flask(__name__)
 def home():
     return "Group Management Bot is running!"
 
+@app.route("/health")
+def health():
+    return "OK", 200
+
 # -------------------- توابع کمکی --------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
@@ -336,7 +340,7 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(text)
 
-# -------------------- منو خصوصی (بدون هیچ سلام یا خداحافظ) --------------------
+# -------------------- منوی خصوصی (بدون هیچ سلام یا خداحافظ) --------------------
 async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
