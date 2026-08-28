@@ -18,26 +18,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# کلمات ممنوعه (می‌تونی بیشترش کنی)
-FORBIDDEN_WORDS = ["کص", "کیر", "کسکش", "جنده", "کون", "دیوث", "مادرجنده", "کثافت"]
+# کلمات ممنوعه (لیست قوی‌تر)
+FORBIDDEN_WORDS = [
+    "کص", "کس", "کیر", "کون", "جنده", "کسکش", "دیوث", "مادرجنده",
+    "کثافت", "حرومزاده", "حرومی", "لاشی", "جیش", "شاش", "گایید",
+    "می‌گامت", "بگامت", "ننتو", "مادرتو", "خواهرتو", "کیری", "کونی",
+    "جنده‌", "کس‌کش", "مادرجنده‌", "لاشی‌", "بی‌شرف", "بی‌غیرت",
+    "کصکش", "کسخوار", "جنده‌خانه", "مادرقحبه"
+]
 
-# تنظیمات ضد سیل
+# ضد سیل سریع
 FLOOD_LIMIT = 6
 FLOOD_TIME = 7
 user_messages = defaultdict(list)
 
-# قفلهای گروه (فعلاً در حافظه)
+# قفل محتوا
 group_locks = defaultdict(lambda: {
     "photo": False,
     "video": False,
     "sticker": False,
     "animation": False,
     "document": False,
-    "link": True,  # لینک به صورت پیش‌فرض قفل باشه
+    "link": True,  # لینک به صورت پیش‌فرض قفل است
 })
 
 # سیستم اخطار
 warnings = defaultdict(int)
+
+# Slow Mode
+slowmode_settings = defaultdict(lambda: {"enabled": False, "interval": 60})
+last_message_time = defaultdict(float)
+
+TIME_MAP = {
+    "30s": 30,
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "1h": 3600,
+    "6h": 21600,
+    "1d": 86400,
+}
 
 app = Flask(__name__)
 
@@ -62,6 +82,16 @@ async def delete_msg(update: Update):
     except Exception:
         pass
 
+def format_time(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds} ثانیه"
+    elif seconds < 3600:
+        return f"{seconds // 60} دقیقه"
+    elif seconds < 86400:
+        return f"{seconds // 3600} ساعت"
+    else:
+        return f"{seconds // 86400} روز"
+
 # -------------------- خوش‌آمدگویی --------------------
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.chat_member
@@ -69,7 +99,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if result.old_chat_member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.BANNED, ChatMemberStatus.RESTRICTED]:
             user = result.new_chat_member.user
             name = user.first_name
-            
+
             text = (
                 f"سلام {name} عزیز 🌸\n\n"
                 f"به جمع‌مون خیلی خوش اومدی!\n"
@@ -77,12 +107,12 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"برای دیدن قوانین می‌تونی از دستور /rules استفاده کنی.\n"
                 f"خوشحالیم که هستی 🌿"
             )
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=text
-            )
+            try:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+            except Exception as e:
+                logger.error(f"Welcome error: {e}")
 
-# -------------------- ضد سیل --------------------
+# -------------------- ضد سیل سریع --------------------
 async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type not in ["group", "supergroup"]:
         return
@@ -100,8 +130,7 @@ async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(user_messages[key]) >= FLOOD_LIMIT:
         try:
             await context.bot.restrict_chat_member(
-                chat_id,
-                user_id,
+                chat_id, user_id,
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=int(now) + 300
             )
@@ -111,9 +140,9 @@ async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             user_messages[key].clear()
         except Exception as e:
-            logger.error(f"Flood restrict error: {e}")
+            logger.error(f"Flood error: {e}")
 
-# -------------------- فیلتر پیام‌ها --------------------
+# -------------------- فیلتر اصلی پیام‌ها --------------------
 async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type not in ["group", "supergroup"]:
         return
@@ -124,43 +153,82 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message:
         return
 
-    text = (message.text or message.caption or "").lower()
     chat_id = update.effective_chat.id
     user = message.from_user
+    text = (message.text or message.caption or "").lower()
+    now = time.time()
 
-    # حذف لینک
-    if group_locks[chat_id]["link"] and message.entities:
-        for entity in message.entities:
-            if entity.type in ["url", "text_link"]:
-                await delete_msg(update)
+    # ---------- Slow Mode ----------
+    settings = slowmode_settings[chat_id]
+    if settings["enabled"]:
+        key = (chat_id, user.id)
+        last_time = last_message_time[key]
+        interval = settings["interval"]
+
+        if now - last_time < interval:
+            remaining = int(interval - (now - last_time))
+            await delete_msg(update)
+            try:
                 await context.bot.send_message(
                     chat_id,
-                    f"🔗 {user.first_name} عزیز، ارسال لینک در این گروه مجاز نیست."
+                    f"⏳ {user.first_name} عزیز، محدودیت ارسال پیام فعاله.\n"
+                    f"لطفاً {format_time(remaining)} دیگه صبر کن."
                 )
-                return
+            except:
+                pass
+            return
+        else:
+            last_message_time[key] = now
 
-    # کلمات ممنوعه
+    # ---------- تشخیص لینک (قوی‌تر) ----------
+    has_link = False
+
+    if message.entities:
+        for entity in message.entities:
+            if entity.type in ["url", "text_link"]:
+                has_link = True
+                break
+
+    link_keywords = ["http://", "https://", "www.", "t.me/", "telegram.me/"]
+    if any(keyword in text for keyword in link_keywords):
+        has_link = True
+
+    if group_locks[chat_id]["link"] and has_link:
+        await delete_msg(update)
+        try:
+            await context.bot.send_message(
+                chat_id,
+                f"🔗 {user.first_name} عزیز، ارسال لینک در این گروه مجاز نیست."
+            )
+        except:
+            pass
+        return
+
+    # ---------- کلمات ممنوعه ----------
     for word in FORBIDDEN_WORDS:
         if word in text:
             await delete_msg(update)
             warnings[(chat_id, user.id)] += 1
             count = warnings[(chat_id, user.id)]
-            
-            await context.bot.send_message(
-                chat_id,
-                f"🚫 {user.first_name} جان، از کلمات نامناسب استفاده نکن.\n"
-                f"اخطار {count} از ۳"
-            )
-            
+
+            try:
+                await context.bot.send_message(
+                    chat_id,
+                    f"🚫 {user.first_name} جان، از کلمات نامناسب استفاده نکن.\n"
+                    f"اخطار {count} از ۳"
+                )
+            except:
+                pass
+
             if count >= 3:
                 try:
                     await context.bot.ban_chat_member(chat_id, user.id)
-                    await context.bot.send_message(chat_id, f"کاربر به دلیل ۳ اخطار از گروه حذف شد.")
+                    await context.bot.send_message(chat_id, "کاربر به دلیل ۳ اخطار از گروه حذف شد.")
                 except Exception:
                     pass
             return
 
-    # قفل محتوا
+    # ---------- قفل محتوا ----------
     locks = group_locks[chat_id]
     if (locks["photo"] and message.photo) or \
        (locks["video"] and message.video) or \
@@ -168,6 +236,54 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
        (locks["animation"] and message.animation) or \
        (locks["document"] and message.document):
         await delete_msg(update)
+
+# -------------------- دستور Slow Mode --------------------
+async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
+
+    chat_id = update.effective_chat.id
+    args = context.args
+
+    if not args:
+        settings = slowmode_settings[chat_id]
+        if settings["enabled"]:
+            await update.message.reply_text(
+                f"⏳ محدودیت ارسال پیام **فعال** است.\n"
+                f"فاصله مجاز: هر {format_time(settings['interval'])} یک پیام"
+            )
+        else:
+            await update.message.reply_text("⏳ محدودیت ارسال پیام در حال حاضر **خاموش** است.")
+        return
+
+    command = args[0].lower()
+
+    if command == "off":
+        slowmode_settings[chat_id]["enabled"] = False
+        await update.message.reply_text("✅ محدودیت ارسال پیام خاموش شد.")
+        return
+
+    if command in TIME_MAP:
+        slowmode_settings[chat_id]["enabled"] = True
+        slowmode_settings[chat_id]["interval"] = TIME_MAP[command]
+        await update.message.reply_text(
+            f"✅ محدودیت ارسال پیام فعال شد.\n"
+            f"هر کاربر هر {format_time(TIME_MAP[command])} می‌تونه یک پیام بفرسته."
+        )
+        return
+
+    await update.message.reply_text(
+        "فرمت درست نیست.\n\n"
+        "مثال‌های درست:\n"
+        "/slowmode off\n"
+        "/slowmode 30s\n"
+        "/slowmode 1m\n"
+        "/slowmode 5m\n"
+        "/slowmode 15m\n"
+        "/slowmode 1h\n"
+        "/slowmode 6h\n"
+        "/slowmode 1d"
+    )
 
 # -------------------- دستورات مدیریتی --------------------
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,8 +320,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.restrict_chat_member(
-            update.effective_chat.id,
-            user.id,
+            update.effective_chat.id, user.id,
             permissions=ChatPermissions(can_send_messages=False)
         )
         await update.message.reply_text(f"🔇 کاربر {user.first_name} میوت شد.")
@@ -221,8 +336,7 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.restrict_chat_member(
-            update.effective_chat.id,
-            user.id,
+            update.effective_chat.id, user.id,
             permissions=ChatPermissions(
                 can_send_messages=True,
                 can_send_media_messages=True,
@@ -246,8 +360,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = warnings[(chat_id, user.id)]
     
     await update.message.reply_text(
-        f"⚠️ اخطار به {user.first_name}\n"
-        f"تعداد اخطار: {count} از ۳"
+        f"⚠️ اخطار به {user.first_name}\nتعداد اخطار: {count} از ۳"
     )
     
     if count >= 3:
@@ -299,6 +412,7 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("unmute", unmute))
     application.add_handler(CommandHandler("warn", warn_user))
     application.add_handler(CommandHandler("rules", rules))
+    application.add_handler(CommandHandler("slowmode", slowmode))
 
     application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, filter_message), group=1)
