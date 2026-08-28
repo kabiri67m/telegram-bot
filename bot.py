@@ -1,6 +1,5 @@
 import logging
 import os
-import asyncio
 import threading
 from flask import Flask
 from telegram import Update, ReplyKeyboardMarkup
@@ -35,15 +34,20 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling update:", exc_info=context.error)
 
-def run_bot():
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    # اول Flask رو توی thread فرعی اجرا می‌کنیم
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # ربات رو توی main thread اجرا می‌کنیم (مهم)
     token = os.environ.get("BOT_TOKEN")
     if not token:
         logger.error("BOT_TOKEN پیدا نشد!")
-        return
-
-    # ساخت event loop جدید برای این thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+        raise SystemExit("BOT_TOKEN تنظیم نشده")
 
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
@@ -52,12 +56,3 @@ def run_bot():
 
     logger.info("ربات در حال شروع polling...")
     application.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    # اجرای ربات در یک thread جدا
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-    # اجرای Flask
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
