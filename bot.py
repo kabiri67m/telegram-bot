@@ -7,7 +7,7 @@ from flask import Flask
 from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ChatMemberHandler,
-    ContextTypes, filters
+    CallbackQueryHandler, ContextTypes, filters
 )
 from telegram.constants import ChatMemberStatus
 
@@ -95,7 +95,6 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if result.old_chat_member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.BANNED, ChatMemberStatus.RESTRICTED]:
             user = result.new_chat_member.user
             name = user.first_name
-
             text = (
                 f"سلام {name} عزیز 🌸\n\n"
                 f"به جمع‌مون خیلی خوش اومدی!\n"
@@ -108,7 +107,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Welcome error: {e}")
 
-# -------------------- ضد سیل سریع --------------------
+# -------------------- ضد سیل --------------------
 async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type not in ["group", "supergroup"]:
         return
@@ -118,7 +117,6 @@ async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     now = time.time()
-
     key = (chat_id, user_id)
     user_messages[key] = [t for t in user_messages[key] if now - t < FLOOD_TIME]
     user_messages[key].append(now)
@@ -138,7 +136,7 @@ async def check_flood(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Flood error: {e}")
 
-# -------------------- فیلتر اصلی پیام‌ها --------------------
+# -------------------- فیلتر پیام‌ها --------------------
 async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type not in ["group", "supergroup"]:
         return
@@ -154,13 +152,12 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (message.text or message.caption or "").lower()
     now = time.time()
 
-    # ---------- Slow Mode ----------
+    # Slow Mode
     settings = slowmode_settings[chat_id]
     if settings["enabled"]:
         key = (chat_id, user.id)
         last_time = last_message_time[key]
         interval = settings["interval"]
-
         if now - last_time < interval:
             remaining = int(interval - (now - last_time))
             await delete_msg(update)
@@ -176,16 +173,15 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             last_message_time[key] = now
 
-    # ---------- تشخیص لینک ----------
+    # لینک
     has_link = False
     if message.entities:
         for entity in message.entities:
             if entity.type in ["url", "text_link"]:
                 has_link = True
                 break
-
     link_keywords = ["http://", "https://", "www.", "t.me/", "telegram.me/"]
-    if any(keyword in text for keyword in link_keywords):
+    if any(k in text for k in link_keywords):
         has_link = True
 
     if group_locks[chat_id]["link"] and has_link:
@@ -196,41 +192,44 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
-    # ---------- کلمات ممنوعه ----------
+    # کلمات ممنوعه
     for word in FORBIDDEN_WORDS:
         if word in text:
             await delete_msg(update)
             warnings[(chat_id, user.id)] += 1
             count = warnings[(chat_id, user.id)]
-
             try:
                 await context.bot.send_message(chat_id, f"🚫 {user.first_name} جان، از کلمات نامناسب استفاده نکن.\nاخطار {count} از ۳")
             except:
                 pass
-
             if count >= 3:
                 try:
                     await context.bot.ban_chat_member(chat_id, user.id)
                     await context.bot.send_message(chat_id, "کاربر به دلیل ۳ اخطار از گروه حذف شد.")
-                except Exception:
+                except:
                     pass
             return
 
-    # ---------- قفل محتوا ----------
+    # قفل محتوا
     locks = group_locks[chat_id]
     if (locks["photo"] and message.photo) or (locks["video"] and message.video) or \
        (locks["sticker"] and message.sticker) or (locks["animation"] and message.animation) or \
        (locks["document"] and message.document):
         await delete_msg(update)
 
-# -------------------- دستورات اصلی --------------------
+# -------------------- دستورات --------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
+    keyboard = [[InlineKeyboardButton("⚙️ منوی تنظیمات", callback_data="settings_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("منوی تنظیمات:", reply_markup=reply_markup)
+
 async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
-
     chat_id = update.effective_chat.id
     args = context.args
-
     if not args:
         settings = slowmode_settings[chat_id]
         if settings["enabled"]:
@@ -238,33 +237,29 @@ async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("⏳ محدودیت ارسال پیام در حال حاضر **خاموش** است.")
         return
-
     command = args[0].lower()
     if command == "off":
         slowmode_settings[chat_id]["enabled"] = False
         await update.message.reply_text("✅ محدودیت ارسال پیام خاموش شد.")
         return
-
     if command in TIME_MAP:
         slowmode_settings[chat_id]["enabled"] = True
         slowmode_settings[chat_id]["interval"] = TIME_MAP[command]
         await update.message.reply_text(f"✅ محدودیت ارسال پیام فعال شد.\nهر کاربر هر {format_time(TIME_MAP[command])} می‌تونه یک پیام بفرسته.")
         return
-
-    await update.message.reply_text("فرمت درست نیست.\n\nمثال:\n/slowmode 1m\n/slowmode 30s")
+    await update.message.reply_text("فرمت درست نیست.\nمثال:\n/slowmode 1m\n/slowmode 30s\n/slowmode off")
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
     if not update.message.reply_to_message:
         return await update.message.reply_text("لطفاً روی پیام کاربر ریپلای کنید.")
-    
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.ban_chat_member(update.effective_chat.id, user.id)
         await update.message.reply_text(f"✅ کاربر {user.first_name} از گروه بن شد.")
     except Exception as e:
-        await update.message.reply_text(f"خطا در بن کردن: {e}")
+        await update.message.reply_text(f"خطا: {e}")
 
 async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -283,7 +278,6 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("این دستور فقط برای ادمین‌هاست.")
     if not update.message.reply_to_message:
         return await update.message.reply_text("روی پیام کاربر ریپلای کنید.")
-    
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.restrict_chat_member(update.effective_chat.id, user.id, permissions=ChatPermissions(can_send_messages=False))
@@ -296,7 +290,6 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if not update.message.reply_to_message:
         return await update.message.reply_text("روی پیام کاربر ریپلای کنید.")
-    
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.restrict_chat_member(update.effective_chat.id, user.id, permissions=ChatPermissions(
@@ -311,24 +304,20 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if not update.message.reply_to_message:
         return await update.message.reply_text("روی پیام کاربر ریپلای کنید.")
-    
     user = update.message.reply_to_message.from_user
     chat_id = update.effective_chat.id
     warnings[(chat_id, user.id)] += 1
     count = warnings[(chat_id, user.id)]
-    
     await update.message.reply_text(f"⚠️ اخطار به {user.first_name}\nتعداد اخطار: {count} از ۳")
-    
     if count >= 3:
         try:
             await context.bot.ban_chat_member(chat_id, user.id)
             await update.message.reply_text("کاربر به دلیل ۳ اخطار بن شد.")
-        except Exception:
+        except:
             pass
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = """
-📜 قوانین گروه
+    text = """📜 قوانین گروه
 
 ۱. با احترام با همه صحبت کنید.
 ۲. اسپم و پیام پشت‌سرهم ممنوع است.
@@ -336,71 +325,56 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ۴. استفاده از کلمات رکیک ممنوع است.
 ۵. در صورت ۳ اخطار، از گروه حذف خواهید شد.
 
-با رعایت قوانین، گروه قشنگ‌تری خواهیم داشت 🌿
-"""
+با رعایت قوانین، گروه قشنگ‌تری خواهیم داشت 🌿"""
     await update.message.reply_text(text)
 
-# -------------------- منوی خصوصی (بدون هیچ سلام یا خداحافظ) --------------------
-async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------- منوی Callback --------------------
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    data = query.data
 
-    keyboard = [
-        [InlineKeyboardButton("🔄 Slow Mode", callback_data="slowmode_menu")],
-        [InlineKeyboardButton("🛑 کلمات ممنوعه", callback_data="forbidden_words")],
-        [InlineKeyboardButton("📷 قفل محتوا", callback_data="lock_menu")],
-        [InlineKeyboardButton("❌ ریست تنظیمات", callback_data="reset_settings")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    if data == "settings_menu":
+        keyboard = [
+            [InlineKeyboardButton("🔄 Slow Mode", callback_data="slowmode_menu")],
+            [InlineKeyboardButton("🛑 کلمات ممنوعه", callback_data="forbidden_words")],
+            [InlineKeyboardButton("📷 قفل محتوا", callback_data="lock_menu")],
+            [InlineKeyboardButton("❌ ریست تنظیمات", callback_data="reset_settings")]
+        ]
+        await query.edit_message_text("⚙️ تنظیمات گروه:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    await query.edit_message_text(
-        "⚙️ تنظیمات گروه:\n\n"
-        "از دکمه‌ها انتخاب کن تا تنظیمات تغییر کنه.",
-        reply_markup=reply_markup
-    )
+    elif data == "slowmode_menu":
+        keyboard = [
+            [InlineKeyboardButton("✅ خاموش", callback_data="slow_off")],
+            [InlineKeyboardButton("30 ثانیه", callback_data="slow_30s")],
+            [InlineKeyboardButton("۱ دقیقه", callback_data="slow_1m")],
+            [InlineKeyboardButton("۵ دقیقه", callback_data="slow_5m")],
+            [InlineKeyboardButton("۱ ساعت", callback_data="slow_1h")],
+            [InlineKeyboardButton("۱ روز", callback_data="slow_1d")],
+            [InlineKeyboardButton("بازگشت", callback_data="settings_menu")]
+        ]
+        await query.edit_message_text("⏳ Slow Mode:\nهر کاربر فقط یک پیام در هر X ثانیه می‌تونه بفرسته.", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def slowmode_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    elif data == "forbidden_words":
+        await query.edit_message_text("🛑 کلمات ممنوعه:\n\nلیست فعلی:\nکص، کیر، کون، جنده، دیوث، مادرجنده و...\n\nبرای ویرایش لیست بعداً می‌تونیم اضافه کنیم.")
 
-    keyboard = [
-        [InlineKeyboardButton("✅ خاموش", callback_data="slow_off")],
-        [InlineKeyboardButton("30 ثانیه", callback_data="slow_30s")],
-        [InlineKeyboardButton("۱ دقیقه", callback_data="slow_1m")],
-        [InlineKeyboardButton("۵ دقیقه", callback_data="slow_5m")],
-        [InlineKeyboardButton("۱ ساعت", callback_data="slow_1h")],
-        [InlineKeyboardButton("۱ روز", callback_data="slow_1d")],
-        [InlineKeyboardButton("بازگشت به تنظیمات", callback_data="settings_menu")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    elif data == "lock_menu":
+        await query.edit_message_text("📷 قفل محتوا:\n\nعکس، ویدیو، استیکر و... در گروه قفل می‌شن.\n(در نسخه فعلی فقط لینک به صورت پیش‌فرض قفل است)")
 
-    await query.edit_message_text(
-        "⏳ Slow Mode (محدویت ارسال پیام):\n"
-        "هر کاربر فقط یک پیام در هر X ثانیه می‌تونه بفرسته.",
-        reply_markup=reply_markup
-    )
+    elif data == "reset_settings":
+        for cid in list(slowmode_settings.keys()):
+            slowmode_settings[cid]["enabled"] = False
+            slowmode_settings[cid]["interval"] = 60
+        await query.edit_message_text("✅ تنظیمات به حالت پیش‌فرض برگشت.")
 
-async def forbidden_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    await query.edit_message_text("🛑 کلمات ممنوعه:\n\nلیست فعلی:\nکص، کیر، کون، جنده، دیوث، مادرجنده و...\nبرای تغییر بعداً می‌تونیم لیست رو ویرایش کنیم.")
-
-async def lock_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    await query.edit_message_text("📷 قفل محتوا:\n\nعکس، ویدیو، استیکر و... در گروه قفل می‌شن.\nبرای تغییر بعداً می‌تونیم لیست کنیم.")
-
-async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    for chat_id in list(slowmode_settings.keys()):
-        slowmode_settings[chat_id]["enabled"] = False
-        slowmode_settings[chat_id]["interval"] = 60
-
-    await query.edit_message_text("✅ تنظیمات به حالت پیش‌فرض برگردانده شد.")
+    elif data.startswith("slow_"):
+        # توجه: این منو فعلاً فقط نمایشی است چون chat_id گروه را از خصوصی نمی‌دانیم
+        # برای کارکرد واقعی Slow Mode از دستور /slowmode داخل گروه استفاده کن
+        if data == "slow_off":
+            await query.edit_message_text("برای خاموش کردن Slow Mode داخل گروه دستور زیر را بزن:\n/slowmode off")
+        else:
+            time_key = data.replace("slow_", "")
+            await query.edit_message_text(f"برای فعال کردن این حالت داخل گروه دستور زیر را بزن:\n/slowmode {time_key}")
 
 # -------------------- اجرا --------------------
 def run_flask():
@@ -417,6 +391,7 @@ if __name__ == "__main__":
 
     application = Application.builder().token(token).build()
 
+    application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("ban", ban))
     application.add_handler(CommandHandler("unban", unban))
     application.add_handler(CommandHandler("mute", mute))
@@ -429,12 +404,8 @@ if __name__ == "__main__":
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, filter_message), group=1)
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, check_flood), group=2)
 
-    # منو
-    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, settings_menu), group=3)
-    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, slowmode_menu), group=4)
-    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, forbidden_words), group=5)
-    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, lock_menu), group=6)
-    application.add_handler(MessageHandler(filters.CALLBACK_QUERY, reset_settings), group=7)
+    # منوی دکمه‌ای (درست)
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("ربات مدیریت گروه شروع به کار کرد...")
     application.run_polling(
