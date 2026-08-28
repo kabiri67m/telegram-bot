@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import time
+import urllib.request
 from collections import defaultdict
 from flask import Flask
 from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
@@ -31,27 +32,17 @@ FLOOD_TIME = 7
 user_messages = defaultdict(list)
 
 group_locks = defaultdict(lambda: {
-    "photo": False,
-    "video": False,
-    "sticker": False,
-    "animation": False,
-    "document": False,
-    "link": True,
+    "photo": False, "video": False, "sticker": False,
+    "animation": False, "document": False, "link": True,
 })
 
 warnings = defaultdict(int)
-
 slowmode_settings = defaultdict(lambda: {"enabled": False, "interval": 60})
 last_message_time = defaultdict(float)
 
 TIME_MAP = {
-    "30s": 30,
-    "1m": 60,
-    "5m": 300,
-    "15m": 900,
-    "1h": 3600,
-    "6h": 21600,
-    "1d": 86400,
+    "30s": 30, "1m": 60, "5m": 300, "15m": 900,
+    "1h": 3600, "6h": 21600, "1d": 86400,
 }
 
 app = Flask(__name__)
@@ -180,8 +171,7 @@ async def filter_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if entity.type in ["url", "text_link"]:
                 has_link = True
                 break
-    link_keywords = ["http://", "https://", "www.", "t.me/", "telegram.me/"]
-    if any(k in text for k in link_keywords):
+    if any(k in text for k in ["http://", "https://", "www.", "t.me/", "telegram.me/"]):
         has_link = True
 
     if group_locks[chat_id]["link"] and has_link:
@@ -222,8 +212,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         return
     keyboard = [[InlineKeyboardButton("⚙️ منوی تنظیمات", callback_data="settings_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("منوی تنظیمات:", reply_markup=reply_markup)
+    await update.message.reply_text("منوی تنظیمات:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def slowmode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -293,7 +282,8 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.reply_to_message.from_user
     try:
         await context.bot.restrict_chat_member(update.effective_chat.id, user.id, permissions=ChatPermissions(
-            can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True
+            can_send_messages=True, can_send_media_messages=True,
+            can_send_other_messages=True, can_add_web_page_previews=True
         ))
         await update.message.reply_text(f"🔊 کاربر {user.first_name} آنمیوت شد.")
     except Exception as e:
@@ -353,13 +343,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("۱ روز", callback_data="slow_1d")],
             [InlineKeyboardButton("بازگشت", callback_data="settings_menu")]
         ]
-        await query.edit_message_text("⏳ Slow Mode:\nهر کاربر فقط یک پیام در هر X ثانیه می‌تونه بفرسته.", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(
+            "⏳ Slow Mode:\nهر کاربر فقط یک پیام در هر X ثانیه می‌تونه بفرسته.\n\n"
+            "توجه: برای اعمال واقعی، داخل گروه دستور /slowmode را بزن.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
     elif data == "forbidden_words":
-        await query.edit_message_text("🛑 کلمات ممنوعه:\n\nلیست فعلی:\nکص، کیر، کون، جنده، دیوث، مادرجنده و...\n\nبرای ویرایش لیست بعداً می‌تونیم اضافه کنیم.")
+        await query.edit_message_text("🛑 کلمات ممنوعه:\n\nلیست فعلی:\nکص، کیر، کون، جنده، دیوث، مادرجنده و...")
 
     elif data == "lock_menu":
-        await query.edit_message_text("📷 قفل محتوا:\n\nعکس، ویدیو، استیکر و... در گروه قفل می‌شن.\n(در نسخه فعلی فقط لینک به صورت پیش‌فرض قفل است)")
+        await query.edit_message_text("📷 قفل محتوا:\n\nدر حال حاضر لینک به صورت پیش‌فرض قفل است.")
 
     elif data == "reset_settings":
         for cid in list(slowmode_settings.keys()):
@@ -368,13 +362,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ تنظیمات به حالت پیش‌فرض برگشت.")
 
     elif data.startswith("slow_"):
-        # توجه: این منو فعلاً فقط نمایشی است چون chat_id گروه را از خصوصی نمی‌دانیم
-        # برای کارکرد واقعی Slow Mode از دستور /slowmode داخل گروه استفاده کن
         if data == "slow_off":
-            await query.edit_message_text("برای خاموش کردن Slow Mode داخل گروه دستور زیر را بزن:\n/slowmode off")
+            await query.edit_message_text("برای خاموش کردن، داخل گروه بزن:\n/slowmode off")
         else:
-            time_key = data.replace("slow_", "")
-            await query.edit_message_text(f"برای فعال کردن این حالت داخل گروه دستور زیر را بزن:\n/slowmode {time_key}")
+            key = data.replace("slow_", "")
+            await query.edit_message_text(f"برای فعال کردن، داخل گروه بزن:\n/slowmode {key}")
+
+# -------------------- سیستم خود-بیدارکن (Self-Ping) --------------------
+def self_ping_worker():
+    """هر ۱۰ دقیقه یک‌بار به آدرس عمومی خودش درخواست می‌فرستد تا Render نخوابد"""
+    while True:
+        try:
+            url = os.environ.get("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+            if not url:
+                # اگر متغیر نبود، از hostname بساز
+                host = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+                if host:
+                    url = f"https://{host}"
+            if url:
+                if not url.startswith("http"):
+                    url = "https://" + url
+                urllib.request.urlopen(url + "/health", timeout=15)
+                logger.info(f"Self-ping موفق → {url}")
+            else:
+                logger.warning("آدرس عمومی Render پیدا نشد (RENDER_EXTERNAL_URL خالی است)")
+        except Exception as e:
+            logger.warning(f"Self-ping ناموفق: {e}")
+        time.sleep(600)  # ۱۰ دقیقه
 
 # -------------------- اجرا --------------------
 def run_flask():
@@ -382,8 +396,14 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
+    # Flask برای پاسخ به health check و self-ping
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
+
+    # سیستم خود-بیدارکن
+    ping_thread = threading.Thread(target=self_ping_worker, daemon=True)
+    ping_thread.start()
+    logger.info("سیستم خود-بیدارکن (Self-Ping) فعال شد")
 
     token = os.environ.get("BOT_TOKEN")
     if not token:
@@ -403,8 +423,6 @@ if __name__ == "__main__":
     application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, filter_message), group=1)
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, check_flood), group=2)
-
-    # منوی دکمه‌ای (درست)
     application.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("ربات مدیریت گروه شروع به کار کرد...")
